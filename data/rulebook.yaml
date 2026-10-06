@@ -279,3 +279,20 @@ mt5:                                       # docs/08
     btc_swap_both_-18_gold_-6_-1: {portfolio_sharpe: 1.12, cagr: 0.0576, p_pos_3y_blended: 0.68}
     btc_swap_both_-10_gold_-3_0: {portfolio_sharpe: 1.27, cagr: 0.0662, p_pos_3y_blended: 0.71}
   broker_selection_rule: "เลือกโบรกเกอร์ที่ swap ทองฝั่ง long ต่ำ และมีสัญญาทองขนาดเล็ก ถ้าทุน < ~$46k"
+
+leverage_policy:                           # docs/09 (results/leverage_study.json)
+  definition: "effective leverage = notional / equity (ไม่ใช่ leverage ที่ตั้งในหน้าเทรด)"
+  kelly_btc_fixed_leverage: {in_sample_optimum: 2.0, edge_halved_optimum: 1.0, growth_nonpositive_from: 2.0, liquidated_from: 5.0}
+  profiles:
+    conservative: {portfolio_vol: 0.08, btc_eff_lev_avg: 0.09, btc_eff_lev_max: 0.29, cagr_p50_edge_halved: 0.043, mdd_p95_3y: 0.165}
+    growth:       {portfolio_vol: 0.15, btc_eff_lev_avg: 0.17, btc_eff_lev_max: 0.54, cagr_p50_edge_halved: 0.079, mdd_p95_3y: 0.291}
+    aggressive:   {portfolio_vol: 0.25, btc_eff_lev_avg: 0.28, btc_eff_lev_max: 0.90, cagr_p50_edge_halved: 0.124, mdd_p95_3y: 0.441}
+  hard_limits:
+    max_effective_leverage: 1.0            # full Kelly of the halved edge
+    forbidden: ["fixed leverage >= 2x", "portfolio_vol > 0.25"]
+    exchange_leverage_setting_max: 3       # isolated; liquidation distance must stay > 40%
+  escalation: "4% (incubation) → 8% → 15% → 25%; แต่ละขั้น ≥ 6 เดือน และ realized Sharpe ≥ 0.5"
+  entry_exit_study:
+    variants_tested: [pullback_entry, trailing_exit_3sigma5d, pullback_plus_trailing]
+    n_trials_total_per_asset: 7
+    result: "ไม่ดีขึ้นสม่ำเสมอทั้ง BTC และ ETH → คงใช้ baseline (เข้า/ออกตามสัญญาณ + stop 4σ)"

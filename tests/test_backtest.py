@@ -123,5 +123,17 @@ class FetchSafetyTests(unittest.TestCase):
         self.assertEqual(rows, [("2020-01-01", {"close": 1.5}), ("2020-01-02", {"close": 2000.0})])
 
 
+
+class LeverageStudyTests(unittest.TestCase):
+    def test_liquidation_and_kelly_ruin(self):
+        from backtest import leverage_study as ls
+        unit = [0.01, -0.25, 0.02]
+        self.assertIsNotNone(ls.levered_path(unit, [1, 1, 1], [0.01, -0.25, 0.02], 5)["liquidated_at_index"])
+        self.assertIsNone(ls.levered_path(unit, [1, 1, 1], [0.01, -0.25, 0.02], 1)["liquidated_at_index"])
+        curve = ls.kelly_curve(unit, [1, 5])
+        self.assertIsNotNone(curve[1])
+        self.assertIsNone(curve[5])
+
+
 if __name__ == "__main__":
     unittest.main()

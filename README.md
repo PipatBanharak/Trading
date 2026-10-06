@@ -15,6 +15,7 @@ docs/
   06_backtest_s1_results.md      ผล backtest S1 + บันทึกการตรวจความปลอดภัยของข้อมูล
   07_binance_futures_setup.md    ใช้ Binance USDⓈ-M futures: ข้อกฎหมายไทย, เงินต้นที่ต้องใช้, ตั้งค่าบัญชี/คำสั่ง, backtest แบบ Binance
   08_mt5_connection.md           เชื่อม MT5: ทางเลือก A–D, สถาปัตยกรรม, ขั้นตอนติดตั้ง, เงินต้นแบบ lot, ต้นทุน swap
+  09_leverage_and_entry_exit.md  leverage trading จากข้อมูลจริง: Kelly, liquidation, โปรไฟล์ความเสี่ยง, ทดสอบจุดเข้า/ออก
 live/
   mt5_bridge.py                  bridge Python ↔ MT5 (dry-run เป็นค่าเริ่มต้น, SL ฝั่ง server, risk ladder, blackout)
 backtest/
@@ -22,7 +23,8 @@ backtest/
   engine.py                      จำลอง sleeve S1 (vol target, cap, buffer, ต้นทุน, funding, stop)
   stats.py                       Sharpe, PSR, DSR, MinTRL, MDD, stationary bootstrap
   run_s1.py                      รันการศึกษา S1 ทั้งหมด → results/s1_results.json
-tests/                           unit tests 25 ตัว (look-ahead, ต้นทุน, funding, ไฟล์อันตราย, MT5 bridge กับ terminal จำลอง)
+  leverage_study.py              Kelly / leverage sweep / liquidation / entry-exit → results/leverage_study.json
+tests/                           unit tests 26 ตัว (look-ahead, ต้นทุน, funding, ไฟล์อันตราย, MT5 bridge กับ terminal จำลอง)
 results/s1_results.json          ผลลัพธ์ทั้งหมดของ backtest
 data/
   schema.yaml                    Data structure หลัก (v0.2): entities, enums, formula registry, pipeline
