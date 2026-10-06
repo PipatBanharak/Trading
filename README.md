@@ -1,7 +1,7 @@
 # Trading — EA / AI Agent Probability Framework
 
-โปรเจคนี้ยังอยู่ในขั้นค้นคว้าและออกแบบ data structure/กฎ สำหรับคำนวณความน่าจะเป็นที่ EA หรือ AI Trading Agent จะทำกำไรได้อย่างต่อเนื่อง ตอนนี้เน้น **BTC และทองคำ (XAUUSD / XAUUSDT)**
-**ยังไม่มีโค้ด** และข้อมูลทั้งหมดได้จากการอ่านเว็บ โดยไม่ได้ดาวน์โหลดไฟล์หรือข้อมูลราคาใดๆ กลับมา
+โปรเจคนี้ใช้ค้นคว้า ออกแบบ และ backtest กฎสำหรับคำนวณความน่าจะเป็นที่ EA หรือ AI Trading Agent จะทำกำไรได้อย่างต่อเนื่อง ตอนนี้เน้น **BTC และทองคำ (XAUUSD / XAUUSDT)**
+มี backtest ชุดแรกแล้ว (S1) ใช้เฉพาะ Python standard library และข้อมูลราคาผ่านการตรวจความปลอดภัยก่อนใช้ทุกไฟล์ (ดู `docs/06`)
 
 ## โครงสร้าง
 
@@ -12,6 +12,14 @@ docs/
   03_probability_analysis.md     scenario, sensitivity, decision gates G0–G5
   04_ea_market_survey.md         สำรวจ EA/bot ยอดนิยม (ทอง, BTC): เทคนิค ข้อดีข้อเสีย สิ่งที่ยืม/ห้าม
   05_btc_xau_rule_calculations.md  คำนวณกฎสำหรับ BTC + XAU: ต้นทุนต่อ TF, sizing, DD ladder, execution
+  06_backtest_s1_results.md      ผล backtest S1 + บันทึกการตรวจความปลอดภัยของข้อมูล
+backtest/
+  fetch.py                       ดาวน์โหลดแบบ allowlist + ตรวจไฟล์ (magic bytes, strict CSV, ราคาอ้างอิง, SHA-256)
+  engine.py                      จำลอง sleeve S1 (vol target, cap, buffer, ต้นทุน, funding, stop)
+  stats.py                       Sharpe, PSR, DSR, MinTRL, MDD, stationary bootstrap
+  run_s1.py                      รันการศึกษา S1 ทั้งหมด → results/s1_results.json
+tests/test_backtest.py           unit tests (look-ahead, ต้นทุน, funding, การปฏิเสธไฟล์อันตราย)
+results/s1_results.json          ผลลัพธ์ทั้งหมดของ backtest
 data/
   schema.yaml                    Data structure หลัก (v0.2): entities, enums, formula registry, pipeline
   evidence_base.yaml             หลักฐาน + prior
@@ -19,7 +27,24 @@ data/
   skill_catalog.yaml             สกิล/โมดูล agent + สถาปัตยกรรมที่แนะนำ
   scenarios.yaml                 ตารางคำนวณล่วงหน้า T1–T18
   instruments.yaml               สเปก venue จริง: BTCUSDT perp/spot, BTCUSD CFD, XAUUSD ECN, XAUUSDT perp
-  rulebook.yaml                  กฎที่ใช้จริง v0.1 (risk, execution, sleeves, validation, monitoring)
+  rulebook.yaml                  กฎที่ใช้จริง v0.1 (risk, execution, sleeves, validation, monitoring, ผล backtest)
+  market_data_manifest.json      ที่มาและ hash ของข้อมูลราคา (ไม่ commit ข้อมูลดิบ)
+```
+
+## ผล backtest S1 (docs/06)
+| | Sharpe | CAGR | Max DD | หมายเหตุ |
+|---|---|---|---|---|
+| BTC 2015–2026 | 1.34 | 6.2% | 6.1% | rolling 2 ปี ลดลงเหลือ **0.21 (2025) / 0.05 (2026)** → edge เสื่อม |
+| ETH (OOS) | 1.31 | 5.7% | 5.6% | พารามิเตอร์เดิมทั้งหมด |
+| ทอง 1972–2026 (รายเดือน) | 0.28 | 0.9% | 10.1% | ต่ำกว่าการถือทองเฉยๆ แต่ correlation กับ BTC ≈ −0.06 |
+| พอร์ต 2015–2026 | 1.33 | 6.9% | 4.6% | ไม่มีปีติดลบ (in-sample) |
+
+ความน่าจะเป็นที่ผล 3 ปีข้างหน้าจะเป็นบวก ≈ **72%** (สมมติ 60% ที่ edge ยังเหลือครึ่งหนึ่ง และ 40% ที่หายไปแล้ว) → แนะนำเริ่มที่ **incubation vol 4%**
+
+```
+python3 -I backtest/fetch.py --out <โฟลเดอร์นอก repo>      # ดาวน์โหลด + ตรวจความปลอดภัย
+python3 -m backtest.run_s1 --data <โฟลเดอร์เดิม> --out results/s1_results.json
+python3 -m unittest discover -s tests
 ```
 
 ## สรุปกฎหลักสำหรับ BTC + XAU (รายละเอียดอยู่ใน `data/rulebook.yaml`)
@@ -46,10 +71,10 @@ data/
 | LLM ตัดสินใจเทรดเอง | 23.1% | 22.9% | 1.0% |
 | Pipeline เข้มงวด + กระจาย + ¼–½ Kelly | 65.3% | 64.9% | 10.4% |
 
-## ขั้นถัดไป (ต้องได้รับอนุญาต)
-1. ดาวน์โหลดข้อมูลราคาในอดีต (BTC, ทอง, funding history) เพื่อ backtest S1 ตาม validation gates
+## ขั้นถัดไป
+1. เปิด network host `data.binance.vision`, `data-api.binance.vision`, `prices.lbma.org.uk` เพื่อทดสอบบนข้อมูล perps/XAUUSDT รายชั่วโมงและ funding จริง (ตอนนี้ถูก policy บล็อก)
 2. ยืนยันค่าธรรมเนียม XAUUSDT หลังหมดโปรโมชัน และ swap ของโบรกเกอร์ทองที่จะใช้
-3. เริ่มเขียนโค้ดตาม `data/schema.yaml` และ `data/rulebook.yaml`
+3. Incubation (G3) ที่ vol 4% เป็นเวลา 6 เดือน
 
 > ⚠️ เอกสารนี้เป็นการวิเคราะห์เชิงสถิติเพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน
 > Forex ไม่อยู่ภายใต้การกำกับของ ก.ล.ต. และ XAUUSDT ของ Binance อยู่ภายใต้ ADGM FSRA จึงควรตรวจสอบสถานะการกำกับดูแลก่อนใช้งานเสมอ

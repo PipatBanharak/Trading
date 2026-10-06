@@ -221,3 +221,20 @@ expected_outcomes:
   vol_8pct_core: {p_positive: 0.602, p_lenient: 0.602, p_strict: 0.055, cagr_median_if_real: 0.036}
   vol_10pct_core: {p_positive: 0.601, p_lenient: 0.597, p_strict: 0.047, cagr_median_if_real: 0.044}
   vol_8pct_with_validated_sleeves: {p_positive: 0.657, p_lenient: 0.657, p_strict: 0.080, cagr_median_if_real: 0.055}
+
+# -----------------------------------------------------------------------------
+# 9. BACKTEST v1 FINDINGS (docs/06_backtest_s1_results.md, results/s1_results.json)
+# -----------------------------------------------------------------------------
+backtest_v1:
+  data: {BTC_ETH: "Coin Metrics daily close → 2026-05-23", GOLD: "World Bank monthly averages 1972 → 2026-09"}
+  blocked_hosts: [data.binance.vision, data-api.binance.vision, api.binance.com, fapi.binance.com, prices.lbma.org.uk, stooq.com]
+  S1_BTC: {sharpe: 1.34, cagr: 0.0615, max_dd: 0.061, dsr_n4: 1.00, sharpe_2019_plus: 1.11, rolling_2y_sharpe_2025: 0.21, rolling_2y_sharpe_2026: 0.05}
+  S1_ETH_oos: {sharpe: 1.31, cagr: 0.057, max_dd: 0.056}
+  S1_GOLD_monthly: {sharpe_adj: 0.28, cagr: 0.0089, max_dd: 0.101, dsr_n3: 0.96, buy_hold_sharpe_adj: 0.49}
+  portfolio_2015_2026: {sharpe: 1.33, cagr: 0.0693, vol: 0.0515, max_dd: 0.046, sleeve_corr: -0.06}
+  p_positive_3y: {in_sample: 0.997, edge_halved: 0.884, no_edge: 0.464, blended_60_40: 0.72}
+  gates: {G1_G2: passed_historically, G3: "pending — incubation at vol 0.04"}
+  decisions:
+    - "ห้ามขยาย vol เกิน incubation จนกว่า rolling 2y Sharpe ของ BTC S1 กลับมา > 0.5 หรือผ่าน incubation 6 เดือน"
+    - "ทองทำหน้าที่ diversifier (corr −0.06) ไม่ใช่แหล่งกำไรหลัก"
+    - "ต้องทดสอบซ้ำบนข้อมูล Binance perps/XAUUSDT รายชั่วโมง + funding จริง เมื่อเปิด host ได้"

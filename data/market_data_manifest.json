@@ -1,0 +1,200 @@
+{
+ "fetched_at": "2026-10-06T10:14:32.421808+00:00",
+ "sources": {
+  "btc_coinmetrics": {
+   "url": "https://raw.githubusercontent.com/coinmetrics/data/master/csv/btc.csv",
+   "license": "CC BY-NC 4.0 (Coin Metrics, Inc.)",
+   "checks": [
+    "allowlisted https url + size cap + text content-type",
+    "no binary/executable/archive/HTML signatures, UTF-8 text",
+    "strict CSV schema: 203232 cells numeric/date only (no formulas)",
+    "dates strictly increasing, prices > 0, reference prices plausible"
+   ],
+   "bytes": 2482497,
+   "content_type": "text/plain; charset=utf-8",
+   "sha256": "06495ff8e643432e6948b7b4686ce44fc106217287dabdc1b38351d9ddec46c3",
+   "series": {
+    "close": {
+     "n": 5789,
+     "first": "2010-07-18",
+     "last": "2026-05-23",
+     "moves_gt_50pct": 1
+    }
+   },
+   "reference_checks": [
+    {
+     "window": [
+      "2017-12-15",
+      "2017-12-18"
+     ],
+     "last_value": 18982.0250242548,
+     "expected": 19000.0,
+     "deviation": -0.0009,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2020-03-12",
+      "2020-03-13"
+     ],
+     "last_value": 5627.69238836938,
+     "expected": 5000.0,
+     "deviation": 0.1255,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2021-11-08",
+      "2021-11-10"
+     ],
+     "last_value": 64756.0779689071,
+     "expected": 66000.0,
+     "deviation": -0.0188,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2024-03-13",
+      "2024-03-14"
+     ],
+     "last_value": 71505.2729076563,
+     "expected": 72000.0,
+     "deviation": -0.0069,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2025-10-05",
+      "2025-10-06"
+     ],
+     "last_value": 124824.453666861,
+     "expected": 123000.0,
+     "deviation": 0.0148,
+     "status": "ok"
+    }
+   ],
+   "clean_sha256": "b0780017c9eee97c3aa50316fcd9b1e1ad75d44db08ae9ee3b51bc20bb384c41",
+   "status": "accepted"
+  },
+  "eth_coinmetrics": {
+   "url": "https://raw.githubusercontent.com/coinmetrics/data/master/csv/eth.csv",
+   "license": "CC BY-NC 4.0 (Coin Metrics, Inc.)",
+   "checks": [
+    "allowlisted https url + size cap + text content-type",
+    "no binary/executable/archive/HTML signatures, UTF-8 text",
+    "strict CSV schema: 126464 cells numeric/date only (no formulas)",
+    "dates strictly increasing, prices > 0, reference prices plausible"
+   ],
+   "bytes": 2121732,
+   "content_type": "text/plain; charset=utf-8",
+   "sha256": "46b18f3df967405374b1f6ee8a3d11ee1b7a5b176ac9fb4342caf6bf8648f2cc",
+   "series": {
+    "close": {
+     "n": 3942,
+     "first": "2015-08-08",
+     "last": "2026-05-23",
+     "moves_gt_50pct": 0
+    }
+   },
+   "reference_checks": [
+    {
+     "window": [
+      "2018-01-12",
+      "2018-01-14"
+     ],
+     "last_value": 1361.91507568673,
+     "expected": 1350.0,
+     "deviation": 0.0088,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2021-11-08",
+      "2021-11-09"
+     ],
+     "last_value": 4735.69674663939,
+     "expected": 4700.0,
+     "deviation": 0.0076,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2022-06-17",
+      "2022-06-18"
+     ],
+     "last_value": 992.790097311514,
+     "expected": 1050.0,
+     "deviation": -0.0545,
+     "status": "ok"
+    }
+   ],
+   "clean_sha256": "2b4a2017438ff47e014f8f1f4ff9c565cfead2bbfdfe253a833d6123049ce405",
+   "status": "accepted"
+  },
+  "gold_worldbank_monthly": {
+   "url": "https://raw.githubusercontent.com/datasets/gold-prices/main/data/monthly.csv",
+   "license": "PDDL (World Bank Pink Sheet monthly averages)",
+   "checks": [
+    "allowlisted https url + size cap + text content-type",
+    "no binary/executable/archive/HTML signatures, UTF-8 text",
+    "strict CSV schema: 4650 cells numeric/date only (no formulas)",
+    "dates strictly increasing, prices > 0, reference prices plausible"
+   ],
+   "bytes": 35730,
+   "content_type": "text/plain; charset=utf-8",
+   "sha256": "f5945c29f746ff14e54acd635dcbb43dbe9f4706f22d6ac8c5d7c3b7908ebcf5",
+   "series": {
+    "avg_price": {
+     "n": 2325,
+     "first": "1833-01",
+     "last": "2026-09",
+     "moves_gt_50pct": 0
+    }
+   },
+   "reference_checks": [
+    {
+     "window": [
+      "1980-01",
+      "1980-01"
+     ],
+     "last_value": 675.0,
+     "expected": 675.0,
+     "deviation": 0.0,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2011-09",
+      "2011-09"
+     ],
+     "last_value": 1772.0,
+     "expected": 1772.0,
+     "deviation": 0.0,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2020-08",
+      "2020-08"
+     ],
+     "last_value": 1969.0,
+     "expected": 1968.0,
+     "deviation": 0.0005,
+     "status": "ok"
+    },
+    {
+     "window": [
+      "2026-08",
+      "2026-10"
+     ],
+     "last_value": 4319.0,
+     "expected": 4130.0,
+     "deviation": 0.0458,
+     "status": "ok"
+    }
+   ],
+   "clean_sha256": "9a868c9f10aa615886c1d5fb730033c34f73f11350d7a26f5ae3ccc7ba5c2fc4",
+   "status": "accepted"
+  }
+ }
+}

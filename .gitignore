@@ -1,0 +1,5 @@
+# Downloaded market data is third-party/untrusted and license-restricted: never commit it.
+market_data/
+*.csv.untrusted
+__pycache__/
+*.pyc

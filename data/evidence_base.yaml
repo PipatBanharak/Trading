@@ -383,6 +383,18 @@ btc_xau_market_structure:
     source_url: https://cryptobriefing.com/bitcoin-gold-correlation-hits-six-year-high-amid-debasement-fears/
     used_for: [global_risk.risk_allocation]
 
+own_backtests:
+
+  - id: EV-S1-BACKTEST-V1
+    claim: >
+      S1 trend ensemble (พารามิเตอร์ตาม rulebook, N=4 trials): BTC 2015–2026 Sharpe 1.34, ETH OOS 1.31,
+      ทองรายเดือน 1972–2026 Sharpe 0.28 (ปรับ averaging) ต่ำกว่า buy & hold ทอง; rolling 2y Sharpe ของ BTC
+      ลดลงเหลือ 0.21 (2025) และ 0.05 (2026)
+    quality: B
+    bias_flags: [survivorship, regime_specific]
+    source_url: results/s1_results.json
+    used_for: [PR-EDGE-TREND, S1-TREND-BTC, S1-TREND-XAU]
+
 # -----------------------------------------------------------------------------
 # PRIORS ที่สกัดจากหลักฐานข้างบน (ค่าตั้งต้น — ปรับได้)
 # Beta(a,b): mean = a/(a+b)
