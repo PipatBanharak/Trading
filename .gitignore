@@ -3,3 +3,4 @@ market_data/
 *.csv.untrusted
 __pycache__/
 *.pyc
+logs/

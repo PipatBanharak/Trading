@@ -290,6 +290,37 @@ def main(argv=None):
             stats.stationary_bootstrap([x - h * mean_ for x in rr_], 36, 5000, 6)) for h in (0.0, 0.5, 1.0)}
         R["binance_futures"]["portfolio_gold_funding_" + name] = rep
 
+    # ---------------- MT5 CFD configuration (BTCUSD + XAUUSD at an ECN broker)
+    # Crypto CFD swaps are often charged on BOTH sides (e.g. -18%/yr); gold swaps are broker-specific.
+    R["mt5_cfd"] = {}
+    btc_swaps = {"both_sides_-18": (0.18, -0.18), "both_sides_-10": (0.10, -0.10)}
+    gold_swaps = {"long-6_short-1": (0.06, -0.01), "long-3_short0": (0.03, 0.0)}
+    btc_cfd_cost = 20.0 / 85600.0 + 0.0001          # half of a $40 spread + 1bp slippage per side
+    btc_runs = {}
+    for name, (fl, fs) in btc_swaps.items():
+        r = engine.run_sleeve(btc_d, btc_p, crypto_params(cost_per_side=btc_cfd_cost, funding_long=fl, funding_short=fs))
+        btc_runs[name] = r
+        R["mt5_cfd"]["btc_swap_" + name] = sleeve_report(r, BTC_START, 365)
+    gold_runs = {}
+    for name, (fl, fs) in gold_swaps.items():
+        g = engine.run_sleeve(au_d, au_p, gold_params(cost_per_side=COST["xau_ecn_cfd"], funding_long=fl, funding_short=fs))
+        gold_runs[name] = g
+        rep = sleeve_report(g, GOLD_START, 12)
+        rep["sharpe_adj"] = rep["sharpe"] * math.sqrt(2 / 3)
+        R["mt5_cfd"]["gold_swap_" + name] = rep
+    for bn, br in btc_runs.items():
+        for gn, g in gold_runs.items():
+            bmd, bmr = engine.to_monthly(*from_start(br, BTC_START)[:2])
+            gd2, gr2, _, _ = from_start(g, BTC_START[:7])
+            gm = dict(zip(gd2, gr2))
+            pairs = [(d_, r_ + gm[d_]) for d_, r_ in zip(bmd, bmr) if d_ in gm]
+            rr_ = [x for _, x in pairs]
+            rep = stats.summary(rr_, 12, [d_ for d_, _ in pairs])
+            mean_ = sum(rr_) / len(rr_)
+            rep["bootstrap_3y"] = {f"edge_cut_{int(h * 100)}pct": stats.bootstrap_summary(
+                stats.stationary_bootstrap([x - h * mean_ for x in rr_], 36, 5000, 6)) for h in (0.0, 0.5, 1.0)}
+            R["mt5_cfd"][f"portfolio_btc_{bn}__gold_{gn}"] = rep
+
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:
         json.dump(_clean_json(R), f, indent=1)

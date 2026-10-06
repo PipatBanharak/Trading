@@ -18,7 +18,7 @@ meta:
 # 1. VENUE SELECTION
 # -----------------------------------------------------------------------------
 venue_selection:
-  decided: "Binance USDⓈ-M Futures only (2026-10)"           # docs/07
+  decided: "pending — ผู้ใช้แจ้ง Binance USDⓈ-M Futures แล้วจึงแจ้งว่าจะเทรดบน MT5; รอยืนยันว่า MT5 ต่อกับโบรกเกอร์ CFD / Binance bridge / TFEX"   # docs/07, docs/08
   BTC: V-BTC-PERP-BINANCE
   XAU: V-XAU-PERP-BINANCE
   compliance_gate: "ห้ามเริ่มเงินจริงจนกว่ายืนยันสถานะทางกฎหมายของผู้ใช้/บริษัท (docs/07 §0)"
@@ -262,3 +262,20 @@ binance_backtest_v1:                     # docs/07 §3, results/s1_results.json 
     symmetric_5pct: {gold_sharpe_adj: 0.25, portfolio_sharpe: 1.28, p_pos_3y_blended: 0.71}
     symmetric_10_95pct: {gold_sharpe_adj: 0.23, portfolio_sharpe: 1.23, p_pos_3y_blended: 0.70}
     long_pays_only_10_95pct: {gold_sharpe_adj: 0.01, portfolio_sharpe: 1.12, p_pos_3y_blended: 0.69}
+
+mt5:                                       # docs/08
+  bridge: live/mt5_bridge.py
+  connection: "Python MetaTrader5 package ↔ MT5 terminal (Windows หรือ Wine + mt5linux)"
+  run_schedule: "ทุก 15 นาที (สัญญาณวันละครั้ง + ตรวจ circuit breaker ระหว่างวัน)"
+  rebalance_windows_utc: {BTC: "00:16-01:00 (เลี่ยง ±3 นาทีรอบ :15/:30/:45)", XAU: "15:30-16:30 จ.–ศ."}
+  live_requires: ["--live flag", "MT5_ALLOW_LIVE=1", "compliance check (docs/08 §0)"]
+  lot_rounding: "ปัดลงตาม volume_step; ต่ำกว่า volume_min → 0"
+  stops: "server-side SL via TRADE_ACTION_SLTP = 4σ daily, ≥ trade_stops_level"
+  min_equity_usd_lot_0_01:                 # BTC 0.01 BTC, XAU 1 oz; สัญญาณ ½
+    effective_leverage_0_01x: {BTC: 171200, XAU: 826000}
+    incubation_vol_4pct: {BTC: 28567, XAU: 91887}
+    start_vol_8pct: {BTC: 14284, XAU: 45943}
+  cfd_backtest_v1:                         # results/s1_results.json → mt5_cfd
+    btc_swap_both_-18_gold_-6_-1: {portfolio_sharpe: 1.12, cagr: 0.0576, p_pos_3y_blended: 0.68}
+    btc_swap_both_-10_gold_-3_0: {portfolio_sharpe: 1.27, cagr: 0.0662, p_pos_3y_blended: 0.71}
+  broker_selection_rule: "เลือกโบรกเกอร์ที่ swap ทองฝั่ง long ต่ำ และมีสัญญาทองขนาดเล็ก ถ้าทุน < ~$46k"
