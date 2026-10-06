@@ -1,0 +1,123 @@
+# =============================================================================
+# Instruments & Venues — BTC และ Gold (XAUUSD / XAUUSDT)  ณ 2026-10-06
+# -----------------------------------------------------------------------------
+# ใช้เป็น input ของ CostModel / ExecutionPolicy / RiskPlan (ดู data/schema.yaml)
+# ทุกค่าที่มี verify: true ต้องตรวจกับ venue จริงก่อนใช้ (exchangeInfo / contract spec)
+# ค่า cost_rt_frac = ต้นทุนไปกลับ (เปิด+ปิด) เป็นสัดส่วนของราคา
+# =============================================================================
+
+market_state_2026_10:
+  BTC:
+    price_usd: 85600            # 6 ต.ค. 2026
+    implied_vol_dvol_range: [0.37, 0.50]   # DVOL ปี 2026 (มีช่วงเกิน 50 ช่วง มี.ค.)
+    vol_assumption: {low: 0.35, mid: 0.45, high: 0.60}
+    worst_daily_move_ref: -0.39 # มี.ค. 2020 (ใช้เป็น stress)
+    source: [https://cryptotimes.io/2026/10/06/bitcoin-price-today-btc-holds-85500-as-172m-liquidations-etf-outflows-hit-before-fed-minutes, https://www.coindesk.com/markets/2026/03/24/bitcoin-volatility-signals-a-bottom-as-tradfi-reels-in-uncertainty]
+  XAU:
+    price_usd: 4130             # 5–6 ต.ค. 2026
+    ath_2026: 5596              # 30 ม.ค. 2026 ก่อนร่วง
+    crash_2026_01_30: {intraday_drop: -0.095, low: 4686.12, close: 4883.62}
+    gvz_2026_range: [27, 45]    # Cboe Gold Volatility Index
+    vol_assumption: {low: 0.20, mid: 0.30, high: 0.40}
+    hourly_true_range_usd: {y2022_2024: 5, y2026: 26}   # ตรงกับโมเดล 1.6·σ_h ที่ σ=30%
+    session_pattern_h1_2026: {asia_hours_return: 0.129, north_america_hours_return: -0.15}
+    source: [https://www.150currency.com/, https://www.wisdomtree.com/investments/blog/2026/02/03/gold-and-silvers-most-volatile-day, https://fred.stlouisfed.org/series/GVZCLS, https://www.mql5.com/en/blogs/post/776032, https://www.moneymetals.com/news/2026/07/12/a-strange-dichotomy-gold-up-on-the-year-in-asian-markets-down-big-in-the-west-005059]
+  BTC_XAU_correlation:
+    rolling_30d_2026: [-0.88, -0.31]
+    rolling_90d_aug_2026: 0.5
+    long_run: [0.10, 0.13]
+    planning_value: 0.1         # ใช้คำนวณ risk budget; stress test ที่ 0.5
+    source: https://cryptobriefing.com/bitcoin-gold-correlation-hits-six-year-high-amid-debasement-fears/
+
+venues:
+
+  - id: V-BTC-PERP-BINANCE
+    symbol: BTCUSDT
+    type: usdt_margined_perpetual
+    trading_hours: "24/7"
+    fees: {maker: 0.0002, taker: 0.0005, bnb_discount: 0.10, verify: true}
+    funding:
+      interval_hours: 8
+      timestamps_utc: ["00:00", "08:00", "16:00"]
+      base_rate_per_8h: 0.0001          # ≈ 10.95%/ปี เมื่อ clamp ที่ฐาน
+      share_time_positive: 0.92          # > 92% ของเวลาเป็นบวก
+      share_time_at_clamp: 0.31
+      extremes_2026: {jan_peak_per_8h: 0.0051, mar_7d_avg_per_8h: -0.00005}
+    slippage_small_order_frac: 0.0001    # < 0.05% สำหรับไซซ์เล็ก; ใช้ 1bp
+    depth_1bp_usd: 2.3e6
+    min_qty_btc: 0.001
+    microstructure_note: "volatility/volume พุ่งที่ :00/:15/:30/:45 จาก algo (Kim & Hansen 2026)"
+    cost_rt_frac:
+      taker_taker: 0.0012
+      maker_in_taker_out: 0.0008
+      maker_maker: 0.0004
+    carry: funding (long จ่ายเมื่อ funding > 0)
+    source: [https://tradersunion.com/brokers/crypto/view/binance/futures-fees/, https://www.sharpe.ai/futures/bitcoin/funding-rate, https://www.spark.money/tools/funding-rate-comparison, https://onekey.so/blog/ecosystem/hyperliquid-liquidity-depth-20260429/, https://ideas.repec.org/p/arx/papers/2607.09426.html]
+
+  - id: V-BTC-SPOT-BINANCE
+    symbol: BTCUSDT
+    type: spot
+    trading_hours: "24/7"
+    fees: {maker: 0.001, taker: 0.001, verify: true}
+    cost_rt_frac: {taker_taker: 0.0022}
+    carry: none (long-only; short ไม่ได้)
+    use_case: "ถือ long ระยะยาวโดยไม่จ่าย funding"
+
+  - id: V-BTC-CFD-MT5
+    symbol: BTCUSD
+    type: cfd
+    contract_size_btc: 1
+    min_lot: 0.01
+    spread_usd: {ecn_typical: 40, retail_wide_frac: 0.01}   # บางโบรกเกอร์ 1% ของราคา
+    swap_annual_frac: {low: 0.10, high: 0.30, verify: true}
+    cost_rt_frac: {ecn: 0.00047}
+    warning: "swap ของ crypto CFD สูงมากเมื่อเทียบกับการถือ spot หรือ perps"
+    source: [https://fxopen.com/pt-br/news/fxopen-reduces-swap-on-crypto-accounts-down-to-10-2/amp/, https://www.tradingpedia.com/bitcoin-guide/on-line-brokers-offering-bitcoin-cfds/]
+
+  - id: V-XAU-CFD-ECN-MT5
+    symbol: XAUUSD
+    type: cfd
+    contract_size_oz: 100
+    min_lot: 0.01                       # = 1 oz
+    raw_spread_usd: {ic_markets: 0.03, pepperstone: 0.15, market_avg: 0.32}
+    commission_per_lot_rt_usd: 7.0      # $3.5/side/lot
+    cost_rt_usd_per_oz: {normal: 0.25, news_spike: 2.5}
+    cost_rt_frac: {normal: 0.00006, news: 0.0006}
+    session_utc: "Sun ~22:00/23:00 → Fri ~21:00/22:00, พักวันละ ~1 ชม. ช่วง rollover (เลื่อนตาม DST)"
+    rollover_window_utc: ["20:45", "22:15"]   # 5pm New York ± buffer, ครอบทั้ง DST/ไม่ DST
+    news_spread_multiplier: ">10x ช่วง NFP/CPI/FOMC"
+    swap: {verify: true, note: "long มักติดลบ; ใช้ค่าจริงของโบรกเกอร์"}
+    weekend_gap: true
+    source: [https://brokerchooser.com/broker-reviews/pepperstone-review/xauusd-spread, https://fxnx.com/en/blog/xauusd-spread-mt5-typical-peak-session-averages]
+
+  - id: V-XAU-PERP-BINANCE
+    symbol: XAUUSDT
+    type: usdt_margined_perpetual (TradFi perp, Nest Exchange / ADGM FSRA)
+    launched: 2026-01-05
+    trading_hours: "24/5 ตั้งแต่ 2026-09-15 21:00 UTC — หยุด ศ. 21:00 UTC → อา. 21:00 UTC (ไม่มีการเทรด, liquidation, funding)"
+    daily_maintenance_pause: removed
+    max_leverage: 50
+    tick_size: 0.01
+    min_qty_xau: 0.001
+    min_notional_usdt: 5
+    funding: {interval_hours: 4, cap_per_interval: 0.02}
+    fees:
+      promo_until_2026_05_26: {maker: 0.0, taker: 0.000085}
+      standard_assumed: {maker: 0.0002, taker: 0.0004, verify: true}
+    cost_rt_frac: {taker_taker: 0.0009, maker_in_taker_out: 0.0007}
+    weekend_gap: true                    # กลับมามี gap risk หลังเปลี่ยนเป็น 24/5
+    weekend_price_discovery_note: "ช่วง 24/7 ราคาเสาร์-อาทิตย์ทายทิศ gap วันจันทร์ถูก ~89%"
+    source: [https://stablecoininsider.org/binance-tradfi-perpetual-contracts/, https://www.bitrue.com/blog/binance-tradfi-perpetuals-24-5, https://www.cryptotimes.io/2026/09/15/binance-changes-trading-hours-for-commodity-tradfi-perpetuals/, https://finance.liga.net/en/amp/cryptoeconomics/article/gold-and-silver-on-crypto-exchanges-a-market-worth-86-billion-per-day-an-analytical-review-by-binance-research]
+
+# -----------------------------------------------------------------------------
+# สรุปเลือก venue (คำนวณใน docs/05 §C)
+# -----------------------------------------------------------------------------
+venue_recommendation:
+  BTC:
+    primary: V-BTC-PERP-BINANCE      # ต้นทุนต่อไม้ต่ำ, short ได้, ไซซ์เล็กได้
+    long_heavy_alternative: V-BTC-SPOT-BINANCE   # ถ้า funding สูงต่อเนื่อง
+    avoid: V-BTC-CFD-MT5             # swap 10–30%/ปี และ min lot ใหญ่
+  XAU:
+    lowest_cost: V-XAU-CFD-ECN-MT5   # ต้นทุนต่อไม้ถูกกว่า XAUUSDT ~10–15 เท่า แต่ min 1 oz
+    small_account: V-XAU-PERP-BINANCE # ซื้อได้ทีละ 0.001 oz, รวม margin กับ BTC ได้
+    rule: "บัญชี < ~$20k ใช้ XAUUSDT; บัญชีใหญ่และ TF สั้นกว่า H4 ใช้ ECN CFD"

@@ -20,7 +20,7 @@
 # =============================================================================
 
 meta:
-  schema_version: "0.1.0"
+  schema_version: "0.2.0"
   status: design-only        # ยังไม่มีโค้ด implement
   companion_files:
     evidence: data/evidence_base.yaml
@@ -28,6 +28,8 @@ meta:
     skills: data/skill_catalog.yaml
     scenarios: data/scenarios.yaml
     formulas_doc: docs/02_math_framework.md
+    instruments: data/instruments.yaml
+    rulebook: data/rulebook.yaml
 
 # -----------------------------------------------------------------------------
 # ENUMS
@@ -378,6 +380,63 @@ entities:
       n_effective: {type: float, formula: F11}
       sr_portfolio: {type: float, formula: F19}
 
+  # ---------------------------------------------------------------- Venue & execution (v0.2)
+  VenueSpec:
+    description: สเปกของ venue จริง (exchange / โบรกเกอร์) — ข้อมูลอยู่ใน data/instruments.yaml
+    key: id
+    fields:
+      id: {type: str, example: "V-XAU-PERP-BINANCE"}
+      symbol: {type: str}
+      type: {type: str, enum_hint: [spot, usdt_margined_perpetual, cfd]}
+      trading_hours: {type: str, example: "24/5; halt Fri 21:00 → Sun 21:00 UTC"}
+      fees: {type: "map<str,float>", note: "maker / taker / commission"}
+      funding: {type: ref<FundingModel>, nullable: true}
+      min_qty: {type: float}
+      min_notional: {type: float}
+      max_leverage: {type: float}
+      weekend_gap: {type: bool}
+      cost_rt_frac: {type: "map<str,float>", note: "ต้นทุนไปกลับต่อวิธีส่งคำสั่ง"}
+      last_verified: {type: datetime}
+
+  FundingModel:
+    description: ต้นทุนการถือ perps (หรือ swap ของ CFD)
+    fields:
+      interval_hours: {type: float}
+      timestamps_utc: {type: list<str>}
+      cap_per_interval: {type: float}
+      base_rate: {type: float}
+      conditional_on_signal: {type: "map<str,float>", note: "funding เฉลี่ยตอน long / short (F36)"}
+
+  SessionCalendar:
+    description: ช่วงเวลา session / rollover / ข่าว / ปิดสุดสัปดาห์
+    fields:
+      instrument: {type: str}
+      sessions: {type: "map<str,str>", example: {asia: "00:00-07:00", london: "07:00-13:00", ny: "13:00-21:00"}}
+      rollover_blackout: {type: str}
+      news_events: {type: "list<{name: str, time_utc: datetime, blackout_min: int}>"}
+      weekend_halt: {type: str, nullable: true}
+      dst_rules: {type: str}
+
+  ExecutionPolicy:
+    fields:
+      rebalance_time: {type: str}
+      avoid_minutes: {type: list<int>, note: "quarter-hour bursts"}
+      order_logic: {type: list<str>}
+      slippage_guard_frac: {type: float}
+      stop_trigger: {type: str, enum_hint: [mark_price, last_price]}
+
+  SleeveAllocation:
+    description: การแบ่ง risk ให้กลยุทธ์ย่อย (sleeve) ภายในพอร์ต
+    fields:
+      sleeve_id: {type: str}
+      status: {type: str, enum_hint: [core, hypothesis, retired]}
+      risk_share: {type: float}
+      sleeve_vol_target: {type: float, formula: F35}
+      unit_U: {type: float, note: "notional/equity ที่สัญญาณเต็ม = sleeve_vol / σ̂"}
+      cap_U: {type: float, formula: F37}
+      trial_budget: {type: int}
+      trials_used: {type: int}
+
 # -----------------------------------------------------------------------------
 # FORMULA REGISTRY (รายละเอียด/ที่มา: docs/02_math_framework.md)
 # -----------------------------------------------------------------------------
@@ -412,11 +471,23 @@ formula_registry:
   F28: {name: brier_calibration, expr: "BS = mean((p_t − y_t)²)"}
   F29: {name: p_consistent_mixture, expr: "P(consistent) = Σ_k P(state_k)·P(consistent | SR_k, σ, criteria)  (MC)"}
   F30: {name: fundamental_law, expr: "IR ≈ IC·√BR (BR = จำนวนเดิมพันที่เป็นอิสระต่อปี)"}
+  F31: {name: grid_pnl_identity, expr: "PnL_grid ≈ (QV − ΔP²) / (2g) ต่อ 1 หน่วย/ชั้น ; E=0 บน random walk ก่อนต้นทุน (short gamma)"}
+  F32: {name: variance_ratio, expr: "VR(q) = Var(r_t + … + r_{t−q+1}) / (q·Var(r_t)) ; VR>1 = trend (เหมาะ trend), VR<1 = mean reversion (Lo–MacKinlay)"}
+  F33: {name: bar_sigma_atr, expr: "σ_bar = σ_annual·√(h/H_year) ; ATR ≈ 1.6·σ_bar (= 2√(2/π)·σ)"}
+  F34: {name: cost_R_by_timeframe, expr: "cost_R = cost_rt_frac / (k·1.6·σ_bar) ; min TF = TF ที่สั้นที่สุดที่ cost_R ≤ 0.05"}
+  F35: {name: erc_sleeve_vol, expr: "σ_sleeve = σ_p / √(n·(1+(n−1)ρ)) ; U_i = σ_sleeve / σ̂_i"}
+  F36: {name: funding_drag, expr: "drag = U·(E[s⁺]·f_long − E[s⁻]·f_short) ; SR_drag = drag / σ_sleeve"}
+  F37: {name: stress_cap, expr: "U_max = loss_budget / stress_move (เช่น 0.02/0.10 สำหรับ gap ทอง, 0.06/0.40 สำหรับ crash BTC)"}
+  F38: {name: min_equity, expr: "equity_min = k_units · min_notional / U  (k_units ≥ 5)"}
 
 # -----------------------------------------------------------------------------
 # PIPELINE (DAG) — ลำดับการคำนวณ
 # -----------------------------------------------------------------------------
 pipeline:
+  - step: 0_market_and_venue
+    in: [VenueSpec, FundingModel, SessionCalendar, market vol]
+    out: [CostModel, timeframe minimum, SleeveAllocation caps]
+    formulas: [F33, F34, F36, F37, F38]
   - step: 1_priors
     in: [EvidenceRecord]
     out: [PriorBelief]

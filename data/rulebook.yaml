@@ -1,0 +1,223 @@
+# =============================================================================
+# Rulebook v0.1 — BTC + Gold (XAUUSD / XAUUSDT)
+# -----------------------------------------------------------------------------
+# สถานะ: design-only (ยังไม่มีโค้ด, ยังไม่ backtest กับข้อมูลจริง)
+# ทุกค่ามี "derivation" ชี้ไปยังหัวข้อใน docs/05_btc_xau_rule_calculations.md
+# หลักการ: พารามิเตอร์กำหนดล่วงหน้าจากหลักฐาน/ต้นทุน/คณิตศาสตร์ — ไม่ optimize กับราคา
+#          → trial count ของ S1 = 1
+# เวลาทั้งหมดเป็น UTC
+# =============================================================================
+
+meta:
+  version: "0.1.0"
+  status: design-only
+  instruments: [BTC, XAU]
+  depends_on: [data/instruments.yaml, data/schema.yaml]
+
+# -----------------------------------------------------------------------------
+# 1. VENUE SELECTION
+# -----------------------------------------------------------------------------
+venue_selection:
+  BTC:
+    default: V-BTC-PERP-BINANCE
+    switch_long_to_spot_if: "funding_7d_avg > 0.0003 per 8h AND signal > 0"   # §D2
+    banned: [V-BTC-CFD-MT5]                                                  # swap 10–30%/ปี
+  XAU:
+    if_equity_usd_below: 90000
+    then: V-XAU-PERP-BINANCE        # §E3 ซื้อได้ทีละ 0.001 oz
+    else: V-XAU-CFD-ECN-MT5         # ต้นทุนต่อไม้ถูกกว่า ~10–15 เท่า
+  min_equity_usd: 3000              # §E3: ≥5 หน่วยขั้นต่ำของ BTCUSDT ที่สัญญาณเต็ม
+
+# -----------------------------------------------------------------------------
+# 2. TIMEFRAME CONSTRAINT (คำนวณใหม่ทุกวันจาก σ̂)
+# -----------------------------------------------------------------------------
+timeframe_rule:
+  max_cost_R: 0.05                  # §C2
+  stop_atr_multiple_for_test: 2.0
+  formula: "cost_R = cost_rt_frac / (k · 1.6 · σ_annual · sqrt(h / H_year))  (F34)"
+  current_minimum:                  # vol กลาง ต.ค. 2026
+    V-BTC-PERP-BINANCE: {taker: H4, maker_in_taker_out: H4, maker_maker: H1}
+    V-XAU-PERP-BINANCE: {taker: H4, maker_in_taker_out: H4}
+    V-XAU-CFD-ECN-MT5: {normal: M1, news: H1}
+  action_if_violated: "ห้ามเปิด strategy ที่ TF สั้นกว่าขั้นต่ำ"
+
+# -----------------------------------------------------------------------------
+# 3. GLOBAL RISK
+# -----------------------------------------------------------------------------
+global_risk:
+  portfolio_vol_target:
+    incubation: 0.04
+    start: 0.08
+    max: 0.10
+    derivation: "§E1 — full Kelly vol ≈ SR_p (0.47); 8% ≈ 0.17 Kelly; 10% ≈ 0.21 Kelly"
+    raise_only_if: "ผ่าน G3 และ live ≥ 12 เดือน และ realized cost ≤ model"
+  kelly_cap: "vol_target ≤ SR_post / 4"
+  risk_allocation:
+    method: equal_risk_contribution
+    rho_planning: 0.1
+    rho_stress: 0.5
+    sleeve_vol: "σ_p / sqrt(2·(1+ρ))"      # §E2
+  position_unit_U: "U_i = sleeve_vol / σ̂_i   (notional เป็นสัดส่วนของ equity)"
+  caps:
+    U_BTC_max: 0.15     # crash −40% × U ≤ 6% equity  (F37)
+    U_XAU_max: 0.20     # weekend gap 10% × U ≤ 2% equity (F37)
+    gross_notional_max: 0.40
+  leverage_per_position_max: 2          # §E4: liquidation ≈ −49.5% (> BTC worst day −39%)
+  margin_mode: isolated
+  daily_circuit_breaker:                 # §F1 (σ_daily ≈ 0.42% ที่ vol 8%)
+    soft: {loss_pct: 0.015, action: "หยุดเปิด risk ใหม่ 24 ชม. + แจ้งเตือน"}
+    hard: {loss_pct: 0.03,  action: "ปิดทั้งหมด + ตรวจด้วยคน"}
+  drawdown_ladder:                       # §F2 — คิดจาก equity (ไม่ใช่ balance)
+    basis: equity_peak_to_trough
+    levels:
+      - {dd: 0.10, action: review}
+      - {dd: 0.15, action: "ลด risk 50%"}
+      - {dd: 0.20, action: "ปิดทั้งหมด → re-validate → เริ่มใหม่ที่ incubation"}
+
+# -----------------------------------------------------------------------------
+# 4. EXECUTION POLICY
+# -----------------------------------------------------------------------------
+execution_policy:
+  BTC:
+    rebalance_time: "00:20 daily"              # หลัง funding 00:00
+    avoid_minutes: [0, 15, 30, 45]             # ± 3 นาที (quarter-hour bursts)
+    preferred_offsets: ["05-10", "20-25", "35-40", "50-55"]
+  XAU:
+    rebalance_window: "15:30-16:30 Mon-Fri"
+    blackout:
+      rollover: "20:45-22:15 daily"
+      news_minutes_before_after: {NFP: 15, CPI: 15, FOMC_statement: 15, FOMC_press: 30}
+    weekend:
+      venue: V-XAU-PERP-BINANCE
+      halt: "Fri 21:00 → Sun 21:00"
+      pre_weekend_check: "Fri ≤ 20:30: enforce U_XAU_max, no new risk after 20:30"
+  order_logic:
+    step1: "post-only limit at best bid/ask"
+    step2: "ถ้าไม่ fill ใน 10 นาที → taker (marketable limit) กำหนด slippage guard 0.10%"
+    step3: "ถ้าเกิน guard → เลื่อนไปรอบถัดไป, log เหตุผล"
+  stops:
+    type: reduce_only_stop_market
+    trigger_price: mark_price
+  cost_audit:
+    frequency: monthly
+    rule: "ถ้า realized cost > 1.5 × model ติดกัน 2 เดือน → ลด risk 50% และคำนวณ timeframe_rule ใหม่"
+
+# -----------------------------------------------------------------------------
+# 5. STRATEGY SLEEVES
+# -----------------------------------------------------------------------------
+sleeves:
+
+  - id: S1-TREND-BTC
+    status: core
+    instrument: BTC
+    family: trend_following_tsmom
+    edge_source: [behavioral, risk_premium]
+    params:                                   # §D — fixed a priori, N = 1
+      lookbacks_calendar_days: [14, 28, 56, 112]
+      signal: "s = mean(sign(r_L)) ∈ {-1,-0.5,0,0.5,1}"
+      evaluation: daily
+      vol_estimator: {type: ewma, half_life_days: 20, clip_vs_1y_median: [0.5, 2.0]}
+      target_notional: "s · U_BTC"
+      rebalance_buffer_U: 0.25
+      protective_stop_sigma_daily: 4.0         # ≈ 2.5 ATR(D1)
+      reentry_after_stop: "รอ evaluation ถัดไป และสัญญาณยังเป็นทิศเดิม"
+    expected:
+      turnover_U_per_year: 54
+      cost_drag_pct_equity: {perp_maker_taker: 0.32, perp_taker: 0.49}
+      funding_drag_pct_equity: {base: 0.62, stress: 1.19}
+      sr_net_prior: {low: 0.2, mid: 0.35, high: 0.5}
+
+  - id: S1-TREND-XAU
+    status: core
+    instrument: XAU
+    family: trend_following_tsmom
+    edge_source: [behavioral, risk_premium]
+    params:
+      lookbacks_calendar_days: [14, 28, 56, 112]   # ≈ 10/20/40/80 วันทำการ
+      signal: "s = mean(sign(r_L))"
+      evaluation: "daily (Mon-Fri) ใน rebalance_window"
+      vol_estimator: {type: ewma, half_life_days: 20, clip_vs_1y_median: [0.5, 2.0]}
+      target_notional: "s · U_XAU"
+      rebalance_buffer_U: 0.25
+      protective_stop_sigma_daily: 4.0
+      direction: both                           # ห้าม long-only bias จาก backtest ทอง 2020–26
+    expected:
+      turnover_U_per_year: 44
+      cost_drag_pct_equity: {ecn_cfd: 0.03, xauusdt_maker_taker: 0.34}
+      sr_net_prior: {low: 0.2, mid: 0.35, high: 0.45}
+
+  - id: H2-XAU-ASIA-SESSION
+    status: hypothesis
+    max_risk_share_if_passed: 0.25
+    idea: "long ช่วงเอเชีย (~00:00–07:00), flat ช่วง NY"
+    evidence: [EV-GOLD-SESSION-CBS, EV-GOLD-SESSION-2026]
+    trial_budget: 5
+    concerns: [regime_specific_2026, publication_decay, ต้นทุนต่อวัน (ต้องใช้ ECN หรือ maker)]
+
+  - id: H3-BTC-FUNDING-CROWDING
+    status: "cost rule active (§D2); predictive use = hypothesis"
+    trial_budget: 5
+
+  - id: H4-BTC-QUARTER-HOUR-FLOW
+    status: hypothesis (needs trade-level data)
+    evidence: [EV-QUARTER-HOUR-EFFECT]
+    max_risk_share_if_passed: 0.20
+    trial_budget: 5
+
+  - id: H5-MR-WITH-VR-FILTER
+    status: hypothesis
+    rule_sketch: "MR เฉพาะเมื่อ variance ratio VR(q) < 1 อย่างมีนัยสำคัญ (F32), stop บังคับ, ห้ามเฉลี่ยขาลง"
+    max_risk_share_if_passed: 0.20
+    trial_budget: 5
+
+banned_techniques:
+  - grid
+  - grid_recovery_on_drawdown
+  - martingale
+  - dca_safety_orders
+  - hedging_grid
+  - scalping_below_min_timeframe
+  - news_straddle
+  - prop_firm_tuned_presets
+  - fixed_dollar_distances        # ระยะทุกตัวต้องเป็นหน่วย σ/ATR (บทเรียน vol ทอง $5→$26/ชม.)
+
+# -----------------------------------------------------------------------------
+# 6. VALIDATION (BTC/XAU-specific numbers for gates G0–G5)
+# -----------------------------------------------------------------------------
+validation:
+  S1:
+    trials: 1
+    data_required:
+      BTC: "≥ 8 ปี daily (spot index) + funding history"
+      XAU: "≥ 20 ปี daily (ยิ่งยาวยิ่งดี, ครอบหลายระบอบ)"
+    psr_expected_no_optimization: {BTC_sr0_5_8y: 0.92, XAU_sr0_35_20y: 0.94, XAU_sr0_35_50y: 0.99}
+    cross_asset_oos: {BTC: [ETH, top-cap crypto], XAU: [silver, gold futures continuous]}
+    cost_stress: [1.5x, 2x]
+    pass_if: "SR_net > 0 ที่ cost 2x ในทุก asset ทดสอบ และ PSR ≥ 0.9 บน asset หลัก"
+  hypotheses_H2_to_H5:
+    trial_budget_each: 5
+    gate: "DSR ≥ 0.95 (นับ N รวมทุก sleeve), PBO ≤ 0.2, WFE ≥ 0.5, incubation 6 เดือนที่ 25% ของ budget"
+  incubation:
+    duration_months: 6
+    vol_target: 0.04
+    success: "realized cost ≤ 1.2× model, ไม่มี execution error, DD อยู่ภายใน p90 ของ MC"
+
+# -----------------------------------------------------------------------------
+# 7. MONITORING
+# -----------------------------------------------------------------------------
+monitoring:
+  statistical_detection_limit: "SPRT ต้องใช้ ~14 ปีจึงจะจับ SR 0.5→0 ได้ (§F3) — ใช้ประกอบเท่านั้น"
+  primary_controls: [drawdown_ladder, daily_circuit_breaker, cost_audit, funding_audit, venue_change_watch]
+  venue_change_watch:
+    examples: ["XAUUSDT 24/7 → 24/5 (2026-09-15)", "ค่าธรรมเนียมหลังโปรโมชัน", "funding interval/cap"]
+    action: "หยุดเปิด risk ใหม่ → คำนวณ instruments.yaml + timeframe_rule ใหม่"
+  bayes_update: "อัปเดต SR_post รายเดือน (F21) → ปรับ vol_target ≤ SR_post/4"
+
+# -----------------------------------------------------------------------------
+# 8. EXPECTED OUTCOMES (3 ปี, docs/05 §I)
+# -----------------------------------------------------------------------------
+expected_outcomes:
+  assumptions: {p_edge_real: 0.6, sr_if_real: 0.47, sr_if_not: -0.2}
+  vol_8pct_core: {p_positive: 0.602, p_lenient: 0.602, p_strict: 0.055, cagr_median_if_real: 0.036}
+  vol_10pct_core: {p_positive: 0.601, p_lenient: 0.597, p_strict: 0.047, cagr_median_if_real: 0.044}
+  vol_8pct_with_validated_sleeves: {p_positive: 0.657, p_lenient: 0.657, p_strict: 0.080, cagr_median_if_real: 0.055}

@@ -161,3 +161,25 @@ StrategySpec ─► BacktestRun* ─► TrialRegistry(N) ─► ValidationReport
                                                          ▲                       │
                                                          └──── Bayes update ◄────┘
 ```
+
+---
+
+## I. สูตรเพิ่มเติมสำหรับ BTC / XAU (v0.2)
+
+**F31 — Grid P&L identity** (ต่อ 1 หน่วยต่อชั้น, ระยะห่าง $g$)
+$$\text{PnL}_{grid} \approx \frac{QV - (\Delta P)^2}{2g}$$
+ค่าคาดหวังเท่ากับ 0 บน random walk และติดลบเมื่อมีเทรนด์ (grid = short gamma) ซึ่งตรวจสอบด้วย Monte Carlo แล้วใน doc 04 §2.1
+
+**F32 — Variance ratio** (Lo–MacKinlay): $VR(q) = \dfrac{\text{Var}(\sum_{i=0}^{q-1} r_{t-i})}{q\,\text{Var}(r_t)}$ → VR > 1 แปลว่าตลาดมีเทรนด์ (เหมาะกับ trend) และ VR < 1 แปลว่าแกว่งกลับ (เหมาะกับ mean reversion)
+
+**F33 — ขนาดแท่ง**: $\sigma_{bar} = \sigma_{annual}\sqrt{h/H_{year}}$ และ $ATR \approx 1.6\,\sigma_{bar}$
+
+**F34 — ต้นทุนเป็น R ตาม TF**: $c_R = \dfrac{cost_{rt}}{k \cdot 1.6\,\sigma_{bar}}$ → TF ขั้นต่ำคือ TF ที่สั้นที่สุดที่ $c_R \le 0.05$
+
+**F35 — Equal risk contribution**: $\sigma_{sleeve} = \dfrac{\sigma_p}{\sqrt{n(1+(n-1)\rho)}}$ และ $U_i = \sigma_{sleeve}/\hat\sigma_i$
+
+**F36 — Funding drag**: $\text{drag} = U\left(E[s^+]f_{long} - E[s^-]f_{short}\right)$ → ถ้า funding สัมพันธ์กับเทรนด์ ระบบที่ long/short สมมาตรก็ยังเสียเงินสุทธิ
+
+**F37 — Stress cap**: $U_{max} = \dfrac{\text{loss budget}}{\text{stress move}}$ (เช่น gap ทองช่วงสุดสัปดาห์ 10% → 2% equity, BTC crash 40% → 6% equity)
+
+**F38 — Equity ขั้นต่ำ**: $E_{min} = k \cdot \dfrac{\text{min notional}}{U}$ โดย $k \ge 5$

@@ -284,3 +284,45 @@ scenarios:
 scenarios_reading_guide: >
   แม้ไม่มี edge เลย ก็ยังมีโอกาส ~17–28% ที่ 3 ปีจะ "บวก" จากโชค → ผลบวกช่วงสั้น
   ไม่ใช่หลักฐานของ edge. ความต่างที่แท้จริงอยู่ที่ CC-STRICT และขนาด SR
+
+# =============================================================================
+# BTC / XAU TABLES (v0.2) — รายละเอียดใน docs/05_btc_xau_rule_calculations.md
+# =============================================================================
+T15_cost_R_stop_2ATR_mid_vol:
+  columns: [M1, M5, M15, H1, H4, D1]
+  rows:
+    "BTC perp taker/taker":       [0.604, 0.270, 0.156, 0.078, 0.039, 0.016]
+    "BTC perp maker-in/taker-out": [0.403, 0.180, 0.104, 0.052, 0.026, 0.011]
+    "BTC perp maker/maker":       [0.201, 0.090, 0.052, 0.026, 0.013, 0.005]
+    "BTC spot taker":             [1.108, 0.495, 0.286, 0.143, 0.071, 0.029]
+    "XAU ECN CFD normal":         [0.038, 0.017, 0.010, 0.005, 0.002, 0.001]
+    "XAU ECN CFD news":           [0.378, 0.169, 0.098, 0.049, 0.024, 0.010]
+    "XAUUSDT taker/taker":        [0.562, 0.252, 0.145, 0.073, 0.036, 0.015]
+  assumptions: {btc_vol: 0.45, xau_vol: 0.30, btc_price: 85600, xau_price: 4130}
+
+T16_trend_turnover_null:
+  note: "TSMOM ensemble บน random walk (ใช้ตั้งต้นทุน ไม่ใช่วัด edge)"
+  rows:
+    "BTC 14-112d daily":  {turnover_U_yr: 54.4, full_flips_yr: 5.4}
+    "BTC 14-112d weekly": {turnover_U_yr: 19.8, full_flips_yr: 4.3}
+    "BTC 28-224d daily":  {turnover_U_yr: 39.1, full_flips_yr: 2.7}
+    "XAU 10-80td daily":  {turnover_U_yr: 43.5, full_flips_yr: 4.9}
+    "XAU 20-160td daily": {turnover_U_yr: 30.8, full_flips_yr: 2.6}
+
+T17_dd_ladder_mc:
+  columns: [p50, p90, p95, p99]
+  rows:
+    "SR0.47 vol8 1y":  [7.2, 12.2, 14.0, 17.8]
+    "SR0.47 vol8 3y":  [11.4, 18.8, 21.6, 26.8]
+    "SR0.47 vol10 1y": [9.0, 15.0, 17.0, 21.1]
+    "SR0.47 vol10 3y": [14.1, 23.2, 25.9, 33.3]
+    "SR0.00 vol8 1y":  [8.4, 14.2, 16.2, 19.5]
+    "SR0.00 vol10 1y": [10.4, 17.6, 19.8, 23.5]
+  unit: percent max drawdown
+
+T18_btc_xau_plan_outcomes_3y:
+  rows:
+    "vol8 core":           {p_pos: 60.2, p_lenient: 60.2, p_strict: 5.5}
+    "vol10 core":          {p_pos: 60.1, p_lenient: 59.7, p_strict: 4.7}
+    "vol8 core+validated": {p_pos: 65.7, p_lenient: 65.7, p_strict: 8.0}
+  assumptions: {p_edge_real: 0.6, sr_real: 0.47, sr_not: -0.2, sr_with_sleeves: 0.7}

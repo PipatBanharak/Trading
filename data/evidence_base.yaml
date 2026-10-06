@@ -298,6 +298,91 @@ local_regulatory_context_th:
     source_url: https://www.infoquest.co.th/?p=427713
     used_for: [operational_risk]
 
+btc_xau_market_structure:
+
+  - id: EV-CRYPTO-TSMOM
+    claim: >
+      Liu & Tsyvinski (RFS 2021): crypto มี time-series momentum ที่แรง และ proxy ความสนใจของนักลงทุน
+      ทำนายผลตอบแทนได้; ผลตอบแทนสัปดาห์ถัดไปของ BTC เมื่อสัปดาห์ก่อนอยู่ quintile บนสุด = 11.2%
+      (quintile ล่าง 2.6%)
+    quality: A
+    bias_flags: [regime_specific]
+    note: ตัวอย่างข้อมูลช่วงก่อน 2018 — คาดว่าจะเสื่อมตาม McLean–Pontiff
+    source_url: https://www.nber.org/system/files/working_papers/w24877/w24877.pdf
+    used_for: [S1-TREND-BTC]
+
+  - id: EV-BTC-INTRADAY-MOM
+    claim: BTC มี intraday time-series momentum (ครึ่งชั่วโมงแรกตามปริมาณทำนายครึ่งชั่วโมงสุดท้าย) แรงที่สุดในช่วงตลาดขาลง
+    quality: B
+    source_url: https://research.birmingham.ac.uk/en/publications/bitcoin-intraday-time-series-momentum/
+    used_for: [H4-BTC-QUARTER-HOUR-FLOW]
+
+  - id: EV-QUARTER-HOUR-EFFECT
+    claim: >
+      Kim & Hansen (2026): Binance perps (BTC, ETH, ...) ปี 2021–2024 มี burst ของ vol/volume ที่นาที
+      :00/:15/:30/:45 จาก algo; order imbalance ช่วงเปิดทายผลตอบแทน 4–12 ชม. แบบ out-of-sample
+    quality: B
+    source_url: https://ideas.repec.org/p/arx/papers/2607.09426.html
+    used_for: [H4-BTC-QUARTER-HOUR-FLOW, execution_policy]
+
+  - id: EV-GOLD-SESSION-CBS
+    claim: intraday seasonality ของทองเป็นรูปหมวก — ทองขึ้นช่วงเวลาตะวันออกอย่างทนทาน และลงช่วงที่เหลือของวัน
+    quality: B
+    source_url: https://research.cbs.dk/en/studentProjects/gold-price-dynamics-around-the-clock/
+    used_for: [H2-XAU-ASIA-SESSION]
+
+  - id: EV-GOLD-SESSION-2026
+    claim: ครึ่งแรกปี 2026 ทอง +12.9% ช่วงเวลาเอเชีย แต่ −15% ช่วงเวลาอเมริกาเหนือ
+    quality: C
+    bias_flags: [regime_specific, short_window]
+    source_url: https://www.moneymetals.com/news/2026/07/12/a-strange-dichotomy-gold-up-on-the-year-in-asian-markets-down-big-in-the-west-005059
+    used_for: [H2-XAU-ASIA-SESSION]
+
+  - id: EV-GOLD-VOL-REGIME-2026
+    claim: >
+      true range ต่อชั่วโมงของทองเพิ่มจาก ~$5 (2022–2024) เป็น ~$26 (2026); GVZ 27–45; 30 ม.ค. 2026
+      ทองร่วง −9.5% ในวันเดียวจาก $5,596
+    quality: B
+    source_url: https://www.wisdomtree.com/investments/blog/2026/02/03/gold-and-silvers-most-volatile-day
+    used_for: [banned_techniques.fixed_dollar_distances, F33]
+
+  - id: EV-GOLD-GRID-HONEST
+    claim: >
+      นักพัฒนาสร้าง gold grid EA 3 ตัวแล้ววัดผลซื่อตรง — ล้มเหลวทั้งหมด; ตัวหนึ่ง win rate 98.5%
+      (844 ไม้) แต่ผลรวม −23.2%
+    quality: C
+    source_url: https://www.mql5.com/en/blogs/post/776032
+    used_for: [PR-EDGE-GRID-MARTINGALE, F31]
+
+  - id: EV-QUANTUM-EMPEROR-DD
+    claim: EA ขายดีที่สุดในประวัติ MQL5 (5,000+ ชุด) — นักวิเคราะห์อิสระระบุว่าเป็น martingale-grid แฝง; DD 70% มิ.ย. 2024
+    quality: C
+    source_url: https://newyorkcityservers.com/blog/quantum-emperor-review
+    used_for: [PR-EDGE-MARKET-EA]
+
+  - id: EV-XAUUSDT-24-5
+    claim: >
+      Binance XAUUSDT (เปิด 5 ม.ค. 2026, 50x, funding ทุก 4 ชม. cap ±2%) เปลี่ยนจาก 24/7 เป็น 24/5
+      ตั้งแต่ 15 ก.ย. 2026 21:00 UTC — หยุด ศ. 21:00 ถึง อา. 21:00 UTC (ไม่มี trade/liquidation/funding)
+      → weekend gap risk กลับมา
+    quality: B
+    source_url: https://www.bitrue.com/blog/binance-tradfi-perpetuals-24-5
+    used_for: [execution_policy.XAU.weekend, caps.U_XAU_max]
+
+  - id: EV-BTC-FUNDING-STATS
+    claim: >
+      funding BTC เป็นบวก > 92% ของเวลา, Binance clamp ที่ 0.01%/8h ~31% ของเวลา;
+      ม.ค. 2026 พุ่งถึง 0.51%/8h; มี.ค. 2026 ค่าเฉลี่ย 7 วันติดลบต่ำสุดตั้งแต่ 2023
+    quality: C
+    source_url: https://www.sharpe.ai/futures/bitcoin/funding-rate
+    used_for: [S1-TREND-BTC.funding_drag, H3-BTC-FUNDING-CROWDING]
+
+  - id: EV-BTC-GOLD-CORR-2026
+    claim: correlation BTC–ทอง 30 วันปี 2026 อยู่ที่ −0.88 ถึง −0.31; 90 วัน (ส.ค. 2026) > 0.5; ระยะยาว ~+0.1
+    quality: C
+    source_url: https://cryptobriefing.com/bitcoin-gold-correlation-hits-six-year-high-amid-debasement-fears/
+    used_for: [global_risk.risk_allocation]
+
 # -----------------------------------------------------------------------------
 # PRIORS ที่สกัดจากหลักฐานข้างบน (ค่าตั้งต้น — ปรับได้)
 # Beta(a,b): mean = a/(a+b)
