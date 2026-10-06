@@ -1,0 +1,197 @@
+# =============================================================================
+# Strategy Catalog — กลุ่มกลยุทธ์ที่ EA / Agent ใช้บ่อย + prior สำหรับคำนวณ
+# -----------------------------------------------------------------------------
+# sr_net_prior = Sharpe สุทธิหลังต้นทุนที่ "คาดว่าจะเห็นใน live ถ้า edge จริง"
+#   เป็นค่าประมาณตั้งต้นจากหลักฐานใน evidence_base.yaml + ประสบการณ์อุตสาหกรรม
+#   ไม่ใช่ข้อเท็จจริง → ต้องแทนที่ด้วย posterior หลัง validation (F20/F21)
+# p_edge_prior     = อ้าง id ใน evidence_base.yaml#priors
+# cost_sensitivity = edge หายเร็วแค่ไหนเมื่อ spread/slippage เพิ่ม
+# =============================================================================
+
+families:
+
+  - id: SC-TREND-TSMOM
+    family: trend_following_tsmom
+    edge_source: [risk_premium, behavioral]
+    mechanism: >
+      คนตอบสนองข่าวช้า (underreaction) แล้วตามแห่ทีหลัง (herding) + hedging flow
+      → ราคาเคลื่อนเป็นแนวโน้มในกรอบหลายสัปดาห์–หลายเดือน
+    evidence: [EV-TREND-CENTURY, EV-CTA-LOST-DECADE]
+    p_edge_prior: PR-EDGE-TREND
+    sr_net_prior: {low: 0.2, mid: 0.4, high: 0.7}
+    profile: {win_rate: "35-45%", payoff: "ได้ไม้ใหญ่ เสียไม้เล็ก", skew: positive, turnover: low}
+    cost_sensitivity: low
+    regime: {best: [trend_up, trend_down, crisis], worst: [range_low_vol]}
+    decay_risk: low-medium
+    failure_modes: [ช่วง sideways ยาวหลายปี (2010s), whipsaw, ถือตลาดเดียวทำให้ไม่กระจาย]
+    retail_feasibility: high — ต้องกระจายหลายตลาด (FX, metal, index, energy, bond futures)
+    use_as: core
+
+  - id: SC-XS-MOMENTUM
+    family: cross_sectional_momentum
+    edge_source: [behavioral]
+    mechanism: สินทรัพย์ที่ชนะเมื่อ 3–12 เดือนก่อนมักชนะต่อในระยะสั้น
+    evidence: [EV-MCLEAN-PONTIFF]
+    p_edge_prior: PR-EDGE-TREND
+    sr_net_prior: {low: 0.1, mid: 0.3, high: 0.6}
+    profile: {skew: negative (momentum crash), turnover: medium}
+    cost_sensitivity: medium
+    regime: {worst: [crisis rebound]}
+    decay_risk: medium
+    failure_modes: [momentum crash ตอนตลาดกลับตัวแรง]
+    retail_feasibility: medium
+    use_as: satellite
+
+  - id: SC-CARRY
+    family: carry
+    edge_source: [risk_premium]
+    mechanism: ได้ดอกเบี้ยส่วนต่าง (swap) แลกกับ crash risk ตอนสภาพคล่องหาย
+    evidence: [EV-CARRY-CRASH]
+    p_edge_prior: PR-EDGE-CARRY
+    sr_net_prior: {low: 0.1, mid: 0.4, high: 0.6}
+    profile: {win_rate: high, skew: negative, turnover: low}
+    cost_sensitivity: low (แต่ swap ของโบรกเกอร์ CFD อาจกิน carry เกือบหมด)
+    regime: {worst: [crisis]}
+    decay_risk: low
+    failure_modes: [crash ทีเดียวกินกำไรหลายปี, swap โบรกเกอร์ไม่ตรงอัตราดอกเบี้ยจริง]
+    retail_feasibility: medium
+    use_as: satellite (คู่กับ trend เพื่อชดเชย skew)
+
+  - id: SC-MR-SHORT
+    family: mean_reversion_short_term
+    edge_source: [liquidity_provision, behavioral]
+    mechanism: ราคาเบี่ยงเกินแล้วกลับ (ได้ค่าตอบแทนจากการให้สภาพคล่อง)
+    evidence: [EV-PAIRS-DECAY]
+    p_edge_prior: PR-EDGE-SIMPLE-TA
+    sr_net_prior: {low: -0.3, mid: 0.2, high: 0.8}
+    profile: {win_rate: "55-70%", skew: negative, turnover: high}
+    cost_sensitivity: high
+    regime: {best: [range_low_vol], worst: [trend_up, trend_down, crisis]}
+    decay_risk: high
+    failure_modes: [โดนเทรนด์แรงลาก, ต้นทุนกินหมด, ถ้าไม่มี stop จะกลายเป็น averaging]
+    retail_feasibility: low-medium
+    use_as: satellite + regime filter
+
+  - id: SC-PAIRS
+    family: pairs_stat_arb
+    edge_source: [liquidity_provision, structural]
+    mechanism: spread ของสองสินทรัพย์ที่ cointegrate กลับสู่ค่าเฉลี่ย
+    evidence: [EV-PAIRS-DECAY]
+    p_edge_prior: PR-EDGE-PAIRS
+    sr_net_prior: {low: -0.2, mid: 0.3, high: 0.8}
+    profile: {skew: negative, turnover: medium-high}
+    cost_sensitivity: high
+    decay_risk: high (ถูก arbitrage ออกตั้งแต่หลัง 2002)
+    failure_modes: [cointegration พัง (structural break), short ไม่ได้/แพงใน CFD]
+    retail_feasibility: low
+    use_as: research only
+
+  - id: SC-BREAKOUT-INTRADAY
+    family: breakout_intraday
+    edge_source: [behavioral, none_identified]
+    mechanism: ราคาทะลุกรอบช่วงเปิดตลาด/session แล้ววิ่งต่อ
+    evidence: [EV-BAJGROWICZ-SCAILLET, EV-NEELY-WELLER-ULRICH]
+    p_edge_prior: PR-EDGE-SIMPLE-TA
+    sr_net_prior: {low: -0.5, mid: 0.0, high: 0.6}
+    profile: {win_rate: "35-50%", skew: positive, turnover: high}
+    cost_sensitivity: high
+    decay_risk: high
+    failure_modes: [false breakout, spread กว้างช่วงข่าว, overfit เวลาเข้า]
+    retail_feasibility: medium
+    use_as: research only
+
+  - id: SC-SCALPING
+    family: scalping
+    edge_source: [none_identified, informational]
+    mechanism: เก็บการเคลื่อนไหวเล็กๆ จำนวนมาก
+    evidence: [EV-BRAZIL-DAYTRADE, EV-TAIWAN-DAYTRADE]
+    p_edge_prior: PR-EDGE-RETAIL-INTRADAY
+    sr_net_prior: {low: -2.0, mid: -0.8, high: 0.5}
+    profile: {win_rate: high, skew: negative, turnover: extreme}
+    cost_sensitivity: extreme — cost_in_R มัก 0.2–0.5R ต่อไม้
+    decay_risk: extreme
+    failure_modes: [ต้นทุน, latency, requote, backtest tick ไม่จริง]
+    retail_feasibility: very low
+    use_as: avoid
+
+  - id: SC-GRID
+    family: grid
+    edge_source: [none_identified]
+    mechanism: วาง order เป็นชั้นๆ หวังราคาแกว่งกลับ — ทุกครั้งที่ไม่กลับ ขาดทุนสะสม
+    evidence: [EV-MARTINGALE-RUIN]
+    p_edge_prior: PR-EDGE-GRID-MARTINGALE
+    sr_net_prior: {low: -1.0, mid: -0.3, high: 0.0}
+    profile: {win_rate: "90%+", skew: extremely negative, kurtosis: extreme}
+    cost_sensitivity: medium
+    failure_modes: [เทรนด์แรงทางเดียว → margin call, SR ใน backtest สูงหลอก เพราะ tail ยังไม่เกิด]
+    retail_feasibility: n/a
+    use_as: avoid — หรือใช้แค่เป็น "ตัวอย่างทดสอบ" ว่า validation จับได้
+
+  - id: SC-MARTINGALE
+    family: martingale
+    edge_source: [none_identified]
+    mechanism: เพิ่ม lot หลังแพ้ — ไม่เปลี่ยน expectancy (เท่าเดิมหรือติดลบเพราะ spread)
+    evidence: [EV-MARTINGALE-RUIN]
+    p_edge_prior: PR-EDGE-GRID-MARTINGALE
+    sr_net_prior: {low: -1.0, mid: -0.5, high: 0.0}
+    profile: {win_rate: "95%+", skew: extremely negative}
+    math_ref: F18
+    use_as: avoid
+
+  - id: SC-NEWS-EVENT
+    family: news_event
+    edge_source: [informational]
+    mechanism: ตอบสนองข่าว/ตัวเลขเศรษฐกิจเร็วกว่าคนอื่น
+    p_edge_prior: PR-EDGE-RETAIL-INTRADAY
+    sr_net_prior: {low: -1.0, mid: -0.3, high: 0.5}
+    cost_sensitivity: extreme (spread กว้าง + slippage ช่วงข่าว)
+    failure_modes: [แข่งความเร็วกับ HFT ไม่ได้, LLM ตีความช้าเกิน]
+    use_as: avoid as entry; ใช้เป็น filter (หยุดเทรดช่วงข่าว)
+
+  - id: SC-ML-SUPERVISED
+    family: ml_supervised
+    edge_source: [depends_on_features]
+    mechanism: model ทำนายทิศทาง/ผลตอบแทน จาก features
+    evidence: [EV-AI-PROFITABILITY-REVIEW-2026, EV-BAILEY-PBO-DSR]
+    p_edge_prior: PR-EDGE-SIMPLE-TA
+    sr_net_prior: {low: -0.5, mid: 0.2, high: 1.0}
+    cost_sensitivity: depends on turnover
+    failure_modes: [label leakage, ไม่ purge/embargo, N trials มหาศาลจาก hyperparameter]
+    use_as: research (ต้อง CPCV + DSR)
+
+  - id: SC-RL
+    family: reinforcement_learning
+    edge_source: [depends_on_features]
+    p_edge_prior: PR-EDGE-SIMPLE-TA
+    sr_net_prior: {low: -1.0, mid: 0.0, high: 0.8}
+    failure_modes: [simulator ไม่สมจริง (ต้นทุน, impact), overfit reward, non-stationarity]
+    use_as: research only
+
+  - id: SC-LLM-DISCRETIONARY
+    family: llm_agent_discretionary
+    edge_source: [informational, none_identified]   # informational ยังไม่มีหลักฐานยืนยัน
+    mechanism: LLM อ่านราคา/ข่าวแล้วตัดสินใจซื้อขายเอง (แบบ Alpha Arena)
+    evidence: [EV-ALPHA-ARENA-S1, EV-ALPHA-ARENA-S1_5, EV-PREDICTION-ARENA, EV-LIVETRADEBENCH, EV-FINSABER, EV-LOOKAHEAD-MEMORIZATION]
+    p_edge_prior: PR-EDGE-LLM-DISCRETIONARY
+    sr_net_prior: {low: -1.5, mid: -0.3, high: 0.8}
+    profile: {variance_between_models: very high, determinism: low}
+    cost_sensitivity: high (turnover สูง + ค่า API ต่อการตัดสินใจ)
+    failure_modes:
+      - ผลต่างกันมากระหว่างโมเดลและระหว่างรอบ (สุ่ม/ไม่ deterministic)
+      - leverage และ position sizing ไม่สม่ำเสมอ
+      - memorization ทำให้ backtest ก่อน cutoff ดีเกินจริง
+      - ระวังเกินในขาขึ้น / กล้าเกินในขาลง
+    use_as: avoid as sole decision maker
+
+  - id: SC-LLM-HYBRID
+    family: llm_hybrid_research
+    edge_source: [inherits_from_core_strategy]
+    mechanism: >
+      LLM ทำหน้าที่ (1) research assistant สร้าง/วิจารณ์ hypothesis (2) อ่านข่าวเพื่อ
+      "ปิด" การเทรดช่วงเสี่ยง (3) สรุป/ตรวจ log — ส่วนการเข้า/ออก/ขนาดไม้ทำโดย
+      กฎ systematic + risk engine แบบ deterministic
+    evidence: [EV-AI-TRADER, EV-AGENTIC-SURVEY-2026]
+    p_edge_prior: PR-EDGE-LLM-HYBRID
+    sr_net_prior: {low: 0.0, mid: 0.4, high: 0.9}
+    failure_modes: [LLM เพิ่ม N trials แบบไม่รู้ตัว (ต้อง log ใน TrialRegistry), ค่า API]
+    use_as: recommended architecture

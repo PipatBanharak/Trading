@@ -1,0 +1,355 @@
+# =============================================================================
+# Evidence Base — ข้อมูลจริงจากงานวิจัย / regulator / benchmark
+# รูปแบบ: EvidenceRecord (ดู data/schema.yaml)
+# หมายเหตุ: ค้นจากเว็บแบบอ่านอย่างเดียว (ไม่ได้ดาวน์โหลดไฟล์) — ตัวเลขอ้างตาม
+#           ที่แหล่งข้อมูล/บทสรุปของแหล่งข้อมูลรายงาน ควรตรวจกับต้นฉบับก่อนใช้จริง
+# =============================================================================
+
+retail_base_rates:
+
+  - id: EV-ESMA-CFD
+    claim: บัญชี CFD รายย่อย 74–89% ขาดทุน (ข้อมูลที่ ESMA ใช้ออกมาตรการปี 2018)
+    metric: share_of_accounts_losing
+    value: {low: 0.74, high: 0.89}
+    extra: {avg_loss_per_client_eur: {low: 1600, high: 29000}}
+    population: retail CFD clients, EU
+    quality: A
+    bias_flags: []
+    source_url: https://www.esma.europa.eu/sites/default/files/library/esma35-43-1135_notice_of_pi_decisions_on_cfds_and_binary_options.pdf
+    used_for: [PR-EDGE-RETAIL-LEVERAGED]
+
+  - id: EV-BROKER-DISCLOSURE
+    claim: โบรกเกอร์ CFD 28 เจ้าที่ต้องเปิดเผยตัวเลข — บัญชีขาดทุน 54–83% เฉลี่ย 76%
+    metric: share_of_accounts_losing
+    value: {low: 0.54, high: 0.83, mean: 0.76}
+    population: retail CFD clients ของโบรกเกอร์ที่ถูกกำกับ
+    quality: B
+    bias_flags: [self_reported]
+    note: เป็นสัดส่วน "บัญชี" ในรอบ 12 เดือน ไม่ใช่สัดส่วนคนที่ขาดทุนตลอดชีวิต
+    source_url: https://brokerchooser.com/broker-reviews/cmc-markets-review/cfd-risk-warning
+    used_for: [PR-EDGE-RETAIL-LEVERAGED]
+
+  - id: EV-BRAZIL-DAYTRADE
+    claim: >
+      คนที่เริ่ม day trade (mini-index futures บราซิล) ปี 2013–2015 และเทรดต่อเนื่อง >300 วัน
+      97% ขาดทุน, 1.1% ได้มากกว่าค่าแรงขั้นต่ำ, 0.5% ได้มากกว่าเงินเดือนแรกเข้าพนักงานธนาคาร;
+      ไม่พบหลักฐานว่า "เรียนรู้แล้วเก่งขึ้น"
+    metric: share_persistent_daytraders_losing
+    value: 0.97
+    extra: {share_above_min_wage: 0.011, share_above_bank_teller: 0.005}
+    population: ทุกคนที่เริ่ม day trade ในตลาด futures บราซิล (ข้อมูลทั้งประชากร)
+    period: 2013-2015 (เริ่ม), ติดตามหลายปี
+    quality: A
+    bias_flags: []
+    source_url: https://www.cxoadvisory.com/investing-expertise/day-trading-a-bust/
+    used_for: [PR-EDGE-RETAIL-INTRADAY]
+
+  - id: EV-TAIWAN-DAYTRADE
+    claim: >
+      Day trader ไต้หวัน (1992–2006) น้อยกว่า 1% ที่ทำกำไรได้อย่างคาดการณ์ได้ (predictably)
+      หลังหักค่าธรรมเนียม; กลุ่ม top 500 ได้ ~37.9 bps/วัน หลังค่าธรรมเนียม,
+      กลุ่มล่างสุด −28.9 bps/วัน
+    metric: share_predictably_profitable_net
+    value: {high: 0.01}
+    population: day trader ทั้งตลาดไต้หวัน
+    period: 1992-2006
+    quality: A
+    bias_flags: []
+    source_url: https://faculty.haas.berkeley.edu/odean/papers/day%20traders/Day%20Trading%20Skill%20110523.pdf
+    used_for: [PR-EDGE-RETAIL-INTRADAY]
+
+  - id: EV-PROP-FIRMS
+    claim: >
+      Prop firm challenge: ผ่าน 5–14% ของ challenge ที่ซื้อ; ผู้ซื้อ challenge ทั้งหมด
+      ได้รับ payout จริง ~7%; ในกลุ่ม funded ได้ payout อย่างน้อย 1 ครั้ง ~45%.
+      Topstep (2025) รายงาน 16.8% ผ่าน combine, 33.3% ของ funded ได้ payout
+    metric: share_buyers_receiving_payout
+    value: {mean: 0.07, pass_rate_low: 0.05, pass_rate_high: 0.14}
+    population: ผู้ซื้อ prop challenge (forex/futures)
+    period: 2025-2026
+    quality: C
+    bias_flags: [self_reported]
+    source_url: https://track360.io/blog/prop-trading-industry-statistics-2026
+    used_for: [PR-EDGE-RETAIL-LEVERAGED]
+
+ea_marketplace:
+
+  - id: EV-MQL5-NO-GLOBAL-NUMBER
+    claim: >
+      ไม่มีตัวเลขสาธารณะที่ซื่อตรงว่า EA กี่ % ทำกำไร เพราะ EA ที่ล้มจะถูกถอด
+      แล้วออกตัวใหม่ (ทำลาย sample = survivorship bias); EA ขายรายย่อยส่วนใหญ่ไม่มี edge
+    metric: qualitative
+    quality: C
+    bias_flags: [survivorship]
+    source_url: https://www.mql5.com/en/blogs/post/774530
+    used_for: [PR-EDGE-MARKET-EA]
+
+  - id: EV-SIGNAL-DD-MASKING
+    claim: >
+      signal บางเจ้าฝากเงินเพิ่มเพื่อทำให้ drawdown ดูต่ำ; ให้ดู Absolute Gain
+      เทียบกับ Gain — ถ้าต่างกันมาก แปลว่ามีการเติมเงินซ่อน DD
+    metric: qualitative
+    quality: C
+    bias_flags: [deposit_masking, self_reported]
+    source_url: https://www.mql5.com/en/blogs/post/763905
+    used_for: [PR-EDGE-MARKET-EA]
+
+  - id: EV-MARTINGALE-RUIN
+    claim: >
+      Martingale/averaging บนทุนจำกัด → ruin เกือบแน่นอนในระยะยาว; สถิติดูดี (win rate สูง)
+      เป็นเวลานานก่อนล้าง port
+    metric: qualitative + math (ดู F18)
+    quality: A
+    source_url: https://www.luxalgo.com/library/concept/martingale-anti-martingale/
+    used_for: [PR-EDGE-GRID-MARTINGALE]
+
+ai_llm_agents:
+
+  - id: EV-ALPHA-ARENA-S1
+    claim: >
+      Alpha Arena Season 1 (18 ต.ค.–3 พ.ย. 2025, crypto perps บน Hyperliquid, เงินจริง):
+      Qwen3 Max ชนะ ~+22%; โมเดลส่วนใหญ่ขาดทุนหนัก โดย GPT-5 ≈ −59%, Grok 4 ≈ −58%,
+      Claude Sonnet 4.5 และ Gemini 2.5 Pro ขาดทุนหนักเช่นกัน (ตามรายงาน)
+    metric: live_return_by_model
+    value: {best: 0.2231, worst: -0.5874}
+    population: 6 frontier LLMs, ~2 สัปดาห์
+    quality: B
+    bias_flags: [short_window, regime_specific]
+    source_url: https://www.traderank.ai/blog/alpha-arena-alternatives-2026
+    used_for: [PR-EDGE-LLM-DISCRETIONARY]
+
+  - id: EV-ALPHA-ARENA-S1_5
+    claim: >
+      Season 1.5 (หุ้นสหรัฐ, ~$320K, 4 รูปแบบการแข่ง): mystery model (Grok 4.2) ชนะ
+      เฉลี่ย ~+12% และเป็นตัวเดียวที่กำไรครบทั้ง 4 รายการ
+    metric: live_return_by_model
+    value: {best_avg: 0.12}
+    quality: B
+    bias_flags: [short_window]
+    source_url: https://forklog.com/en/news/ai-model-grok-4-2-triumphs-in-trading-tournament
+    used_for: [PR-EDGE-LLM-DISCRETIONARY]
+
+  - id: EV-PREDICTION-ARENA
+    claim: 6 frontier models เทรด Kalshi จริง 57 วัน (12 ม.ค.–9 มี.ค. 2026) ผลตอบแทน −16.0% ถึง −30.8% ทุกตัว
+    metric: live_return_range
+    value: {low: -0.308, high: -0.160}
+    quality: B
+    bias_flags: [short_window]
+    source_url: https://arxiv.org/html/2604.07355v1
+    used_for: [PR-EDGE-LLM-DISCRETIONARY]
+
+  - id: EV-LIVETRADEBENCH
+    claim: >
+      21 LLM เทรด live 50 วัน (หุ้นสหรัฐ + Polymarket): คะแนน benchmark ทั่วไป (LMArena)
+      ไม่ได้ทำนายผลการเทรด; เก่งตลาดหนึ่งไม่ generalize ไปอีกตลาด
+    metric: qualitative
+    quality: B
+    bias_flags: [short_window]
+    source_url: https://arxiv.org/html/2511.03628v1
+    used_for: [PR-EDGE-LLM-DISCRETIONARY]
+
+  - id: EV-AI-TRADER
+    claim: >
+      AI-Trader (HKU) live & uncontaminated: general intelligence ไม่ได้ทำให้เทรดสำเร็จ,
+      ความสามารถคุมความเสี่ยงเป็นตัวกำหนดความทนทานข้ามตลาด
+    metric: qualitative
+    quality: B
+    source_url: https://hyper.ai/en/papers/2512.10971
+    used_for: [PR-EDGE-LLM-DISCRETIONARY, PR-EDGE-LLM-HYBRID]
+
+  - id: EV-FINSABER
+    claim: >
+      Backtest 2 ทศวรรษ, 100+ หุ้น: ข้อได้เปรียบของ LLM ที่เคยรายงานลดลงมากเมื่อขยาย
+      universe/ระยะเวลา; LLM ระวังเกินในตลาดขาขึ้น (แพ้ passive) และกล้าเกินในตลาดขาลง
+    metric: qualitative
+    quality: B
+    bias_flags: []
+    source_url: https://arxiv.org/html/2505.07078v3
+    used_for: [PR-EDGE-LLM-DISCRETIONARY]
+
+  - id: EV-LOOKAHEAD-MEMORIZATION
+    claim: >
+      LLM จำราคา/ข่าวในช่วง training ได้ → backtest ก่อน knowledge cutoff มี look-ahead bias;
+      ผลจะดีใน in-sample (ก่อน cutoff) แต่หายไปหลัง cutoff
+    metric: qualitative
+    quality: B
+    bias_flags: [look_ahead]
+    source_url: https://hedgefundalpha.com/education/your-llms-alpha-might-be-mere-memorization/
+    used_for: [PR-EDGE-LLM-DISCRETIONARY]
+
+  - id: EV-AGENTIC-SURVEY-2026
+    claim: >
+      Survey agentic quant trading (2026): ระบบส่วนใหญ่เน้น signal discovery, ยังไม่ค่อย
+      รวม portfolio/execution/risk ครบ; ความสามารถพยากรณ์ที่ดีไม่ได้แปลเป็นผลเทรดใน live
+    metric: qualitative
+    quality: B
+    source_url: https://dsa.hkust-gz.edu.cn/blog/2026/05/29/agentic-quantitative-trading-a-survey-of-workflows-systems-and-evaluation/
+    used_for: [PR-EDGE-LLM-HYBRID]
+
+  - id: EV-AI-PROFITABILITY-REVIEW-2026
+    claim: >
+      Review (literature cutoff 31 ส.ค. 2026): ความก้าวหน้า AI เป็น "upstream" (พยากรณ์,
+      อ่านข้อความ, workflow) แต่ยังไม่มีสถาปัตยกรรม AI ใดที่แสดง net alpha ที่คงทน
+      ข้ามระบอบตลาดและรองรับ capacity
+    metric: qualitative
+    quality: B
+    source_url: https://papers.cool/arxiv/2609.04917
+    used_for: [PR-EDGE-LLM-DISCRETIONARY, PR-EDGE-LLM-HYBRID]
+
+backtest_overfitting_and_decay:
+
+  - id: EV-MCLEAN-PONTIFF
+    claim: 97 ตัวแปรทำนายผลตอบแทน — ผลตอบแทนลดลง 26% นอกช่วงตัวอย่าง และ 58% หลังตีพิมพ์
+    metric: return_decay
+    value: {out_of_sample: 0.26, post_publication: 0.58}
+    quality: A
+    source_url: https://ivey.uwo.ca/media/3775549/pontiff.pdf
+    used_for: [F17]
+
+  - id: EV-HARVEY-LIU-ZHU
+    claim: เพราะมีการขุดข้อมูลมาก ปัจจัยใหม่ควรมี t-stat > 3.0 (ไม่ใช่ 2.0)
+    metric: t_threshold
+    value: 3.0
+    quality: A
+    source_url: https://www.nber.org/papers/w20592
+    used_for: [F06]
+
+  - id: EV-BAILEY-MINBTL
+    claim: >
+      ลอง >45 configuration บนข้อมูล 5 ปี เกือบแน่นอนว่าจะเจอตัวที่ SR in-sample = 1
+      ทั้งที่ SR out-of-sample คาดหวัง = 0
+    metric: overfit_threshold
+    value: {n_trials: 45, years: 5, sr_is: 1.0, sr_oos: 0.0}
+    quality: A
+    source_url: https://www.cxoadvisory.com/?p=23736
+    used_for: [F08, F12]
+
+  - id: EV-BAILEY-PBO-DSR
+    claim: นิยาม PBO (CSCV) และ Deflated Sharpe Ratio
+    quality: A
+    source_url: https://papers.ssrn.com/abstract=2460551
+    used_for: [F07, F09, F13]
+
+  - id: EV-BAJGROWICZ-SCAILLET
+    claim: >
+      กฎ technical บน DJIA 1897–2011: เลือกกฎที่ดีที่สุดล่วงหน้าไม่ได้ (persistence ล้มเหลว)
+      และผลงานหายหมดเมื่อหักต้นทุน
+    quality: A
+    source_url: https://ideas.repec.org/a/eee/jfinec/v106y2012i3p473-491.html
+    used_for: [PR-EDGE-SIMPLE-TA]
+
+  - id: EV-NEELY-WELLER-ULRICH
+    claim: >
+      กฎ technical ใน FX ได้กำไรจริงช่วง 1970s–80s แต่สำหรับ filter/moving average rules
+      หายไปภายในต้นทศวรรษ 1990s (สอดคล้อง Adaptive Markets Hypothesis)
+    quality: A
+    source_url: https://files.stlouisfed.org/files/htdocs/wp/2006/2006-046.pdf
+    used_for: [PR-EDGE-SIMPLE-TA]
+
+  - id: EV-FUTURES-SPA
+    claim: หลังแก้ data snooping (White RC / Hansen SPA) กฎ technical ที่ดีที่สุดมีกำไรนัยสำคัญเพียง 2 จาก 17 สัญญา futures สหรัฐ
+    value: {significant: 2, total: 17}
+    quality: B
+    source_url: https://ageconsearch.umn.edu/record/19039
+    used_for: [PR-EDGE-SIMPLE-TA]
+
+strategies_with_long_evidence:
+
+  - id: EV-TREND-CENTURY
+    claim: >
+      Time-series momentum 67 ตลาด (1880–2016) ได้ผลตอบแทนสุทธิเป็นบวกทุกทศวรรษ
+      และ correlation ต่ำกับหุ้น/พันธบัตร (CXO สรุป Sharpe หลังค่าธรรมเนียม 2/20 ราว 0.4)
+    quality: A
+    bias_flags: []
+    source_url: https://www.cxoadvisory.com/momentum-investing/trend-following-with-intrinsic-momentum-over-the-very-long-run
+    used_for: [PR-EDGE-TREND]
+
+  - id: EV-CTA-LOST-DECADE
+    claim: >
+      ทศวรรษ 2010s ดัชนี Barclays CTA ได้ ~0.8%/ปี (ทศวรรษที่แทบไม่ได้อะไร)
+      แต่ปี 2022 SG Trend Index +27.3% (สูงสุดเป็นประวัติการณ์)
+    metric: regime_dependence
+    quality: B
+    source_url: https://alpha-week.com/2022-cta-index-performance-review
+    used_for: [PR-EDGE-TREND]
+
+  - id: EV-CARRY-CRASH
+    claim: Carry trade ใน FX มี negative skew (crash risk) จากการ unwind เมื่อสภาพคล่องหาย
+    quality: A
+    source_url: https://www.nber.org/papers/w14473
+    used_for: [PR-EDGE-CARRY]
+
+  - id: EV-PAIRS-DECAY
+    claim: >
+      Pairs trading 1962–2002 ได้สูงสุด ~11%/ปี; หลัง 2002 ลดลงมาก
+      (Do & Faff: หลังต้นทุนเหลือ ~30 bps/เดือน)
+    quality: A
+    source_url: https://alphaarchitect.com/2013/06/pairs-trading-kicks-butt/
+    used_for: [PR-EDGE-PAIRS]
+
+local_regulatory_context_th:
+
+  - id: EV-TH-SEC-FOREX
+    claim: >
+      ธุรกิจซื้อขาย Forex ไม่อยู่ภายใต้การกำกับของ ก.ล.ต. (ไม่ใช่หลักทรัพย์/สัญญาซื้อขายล่วงหน้า/
+      สินทรัพย์ดิจิทัล); ก.ล.ต. เตือนเรื่องผู้ให้บริการที่ไม่ได้รับอนุญาตและการหลอกลงทุน
+      (สายด่วน 1207 กด 22)
+    quality: A
+    source_url: https://www.infoquest.co.th/?p=427713
+    used_for: [operational_risk]
+
+# -----------------------------------------------------------------------------
+# PRIORS ที่สกัดจากหลักฐานข้างบน (ค่าตั้งต้น — ปรับได้)
+# Beta(a,b): mean = a/(a+b)
+# -----------------------------------------------------------------------------
+priors:
+  - id: PR-EDGE-RETAIL-INTRADAY
+    target: P(retail intraday trader/EA มี edge สุทธิที่คงทน)
+    distribution: beta
+    params: {a: 1, b: 49}          # mean 2%
+    derived_from: [EV-BRAZIL-DAYTRADE, EV-TAIWAN-DAYTRADE]
+  - id: PR-EDGE-RETAIL-LEVERAGED
+    target: P(บัญชี CFD/FX รายย่อยกำไรในรอบ 12 เดือน)
+    distribution: beta
+    params: {a: 24, b: 76}         # mean 24% (ในรอบปีเดียว ไม่ใช่ต่อเนื่อง)
+    derived_from: [EV-ESMA-CFD, EV-BROKER-DISCLOSURE]
+  - id: PR-EDGE-MARKET-EA
+    target: P(EA ที่ซื้อจาก marketplace มี edge สุทธิ)
+    distribution: beta
+    params: {a: 1, b: 32}          # mean ~3%
+    derived_from: [EV-MQL5-NO-GLOBAL-NUMBER, EV-SIGNAL-DD-MASKING, EV-PROP-FIRMS]
+  - id: PR-EDGE-GRID-MARTINGALE
+    target: P(grid/martingale อยู่รอดระยะยาวโดยไม่ล้างพอร์ต)
+    distribution: point
+    params: {p: 0.0}               # ในระยะยาวไม่มีอนันต์ → ruin แน่นอนทางคณิตศาสตร์
+    derived_from: [EV-MARTINGALE-RUIN]
+  - id: PR-EDGE-SIMPLE-TA
+    target: P(กฎ technical ง่ายๆ ตัวเดียวบนตลาดเดียวมี edge สุทธิ)
+    distribution: beta
+    params: {a: 1, b: 19}          # mean 5%
+    derived_from: [EV-BAJGROWICZ-SCAILLET, EV-NEELY-WELLER-ULRICH, EV-FUTURES-SPA]
+  - id: PR-EDGE-TREND
+    target: P(trend following กระจายหลายตลาดมี SR สุทธิ > 0 ในรอบ 10 ปี)
+    distribution: beta
+    params: {a: 7, b: 3}           # mean 70% — แต่ SR ต่ำและขึ้นกับระบอบ
+    derived_from: [EV-TREND-CENTURY, EV-CTA-LOST-DECADE]
+  - id: PR-EDGE-CARRY
+    target: P(carry มี SR สุทธิ > 0 ระยะยาว)
+    distribution: beta
+    params: {a: 6, b: 4}           # mean 60% — มี crash risk (skew ติดลบ)
+    derived_from: [EV-CARRY-CRASH]
+  - id: PR-EDGE-PAIRS
+    target: P(pairs/stat-arb แบบง่ายยังมี edge สุทธิสำหรับรายย่อย)
+    distribution: beta
+    params: {a: 1, b: 9}           # mean 10%
+    derived_from: [EV-PAIRS-DECAY]
+  - id: PR-EDGE-LLM-DISCRETIONARY
+    target: P(LLM ตัดสินใจเทรดเองมี edge สุทธิที่คงทน)
+    distribution: beta
+    params: {a: 1, b: 9}           # mean 10%
+    derived_from: [EV-ALPHA-ARENA-S1, EV-PREDICTION-ARENA, EV-FINSABER, EV-LIVETRADEBENCH, EV-LOOKAHEAD-MEMORIZATION, EV-AI-PROFITABILITY-REVIEW-2026]
+  - id: PR-EDGE-LLM-HYBRID
+    target: P(LLM ช่วยวิจัย/กรอง + กฎ systematic + risk engine แข็ง มี edge สุทธิ)
+    distribution: beta
+    params: {a: 1, b: 4}           # mean 20% ก่อน validation; ขึ้นกับ edge ของกฎหลัก
+    derived_from: [EV-AI-TRADER, EV-AGENTIC-SURVEY-2026]

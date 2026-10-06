@@ -1,0 +1,455 @@
+# =============================================================================
+# EA / Agent Trading — Probability Data Structure (v0.1)
+# -----------------------------------------------------------------------------
+# จุดประสงค์: โครงสร้างข้อมูลสำหรับ "คำนวณความน่าจะเป็นที่จะทำกำไรได้ต่อเนื่อง"
+# ของ EA (Expert Advisor) หรือ AI/LLM Trading Agent ก่อนเริ่มเขียนโค้ดจริง
+#
+# หลักการออกแบบ
+#   1) ทุกตัวเลขต้องย้อนกลับไปหาแหล่งที่มาได้ (EvidenceRecord -> PriorBelief)
+#   2) นับ "จำนวนครั้งที่ลอง" ทุกครั้ง (TrialRegistry) เพราะเป็นตัวแปรที่
+#      ทำให้ backtest หลอกตามากที่สุด (ใช้ใน DSR / PBO / MinBTL)
+#   3) แยก "ขอบ (edge) จริงหรือไม่" ออกจาก "ทำกำไรต่อเนื่องได้ไหม ถ้า edge จริง"
+#      P(consistent) = Σ_k P(state_k) · P(consistent | state_k)
+#   4) ทุกการคำนวณอ้าง formula id ใน formula_registry (รายละเอียดใน docs/02_math_framework.md)
+#
+# หน่วยมาตรฐาน
+#   - ผลตอบแทน/ความผันผวน: ทศนิยมต่อปี (0.10 = 10%/ปี) เว้นแต่ระบุ
+#   - Sharpe Ratio (SR): ต่อปี (annualized), excess return / vol
+#   - R-multiple: กำไร/ขาดทุนเทียบกับความเสี่ยงต่อไม้ (1R = ระยะ stop loss)
+#   - เวลา: ISO-8601 UTC
+# =============================================================================
+
+meta:
+  schema_version: "0.1.0"
+  status: design-only        # ยังไม่มีโค้ด implement
+  companion_files:
+    evidence: data/evidence_base.yaml
+    strategies: data/strategy_catalog.yaml
+    skills: data/skill_catalog.yaml
+    scenarios: data/scenarios.yaml
+    formulas_doc: docs/02_math_framework.md
+
+# -----------------------------------------------------------------------------
+# ENUMS
+# -----------------------------------------------------------------------------
+enums:
+  AssetClass: [fx, metal, index_cfd, equity, futures, crypto_spot, crypto_perp, prediction_market]
+  Timeframe: [tick, m1, m5, m15, h1, h4, d1, w1]
+  StrategyFamily:
+    - trend_following_tsmom        # time-series momentum
+    - cross_sectional_momentum
+    - carry
+    - mean_reversion_short_term
+    - pairs_stat_arb
+    - breakout_intraday
+    - scalping
+    - grid
+    - martingale
+    - news_event
+    - ml_supervised
+    - reinforcement_learning
+    - llm_agent_discretionary      # LLM ตัดสินใจซื้อขายเอง
+    - llm_hybrid_research          # LLM ช่วยวิจัย/กรองระบอบ + rule-based execute
+  EdgeSource:                      # "ทำไมถึงควรได้กำไร" — ถ้าตอบไม่ได้ prior ต่ำ
+    - risk_premium                 # ได้ค่าตอบแทนจากการรับความเสี่ยงที่คนอื่นไม่อยากถือ
+    - behavioral                   # อคติของผู้เล่นอื่น (underreaction/overreaction)
+    - structural                   # กฎ/ข้อจำกัดของตลาด (rebalancing, roll, hedging flow)
+    - informational                # ข้อมูลที่ดีกว่า/เร็วกว่า
+    - liquidity_provision          # รับ spread / ให้สภาพคล่อง
+    - none_identified              # ไม่มีคำอธิบาย -> น่าจะเป็น noise
+    - depends_on_features          # ML/RL: edge มาจาก feature ที่ใส่ (ต้องระบุแยก)
+    - inherits_from_core_strategy  # LLM hybrid: edge มาจากกฎหลักที่ LLM ไปช่วย
+  EvidenceQuality:
+    - A   # peer-reviewed / ข้อมูลประชากรทั้งหมด / regulator
+    - B   # working paper, benchmark สาธารณะที่มีระเบียบวิธีชัดเจน
+    - C   # vendor/industry report, บล็อก, ตัวเลขที่ตรวจสอบไม่ได้
+  BiasFlag:
+    - survivorship        # ข้อมูลเฉพาะคน/EA ที่ยังรอด
+    - look_ahead          # ใช้ข้อมูลอนาคต (รวมถึง LLM ที่จำข้อมูลช่วง training)
+    - data_snooping       # ลองหลายแบบแล้วเลือกตัวดีสุด
+    - short_window        # ช่วงทดสอบสั้นเกินไป (< MinTRL)
+    - cost_ignored        # ไม่หัก spread/commission/slippage/swap
+    - self_reported
+    - regime_specific     # ทดสอบแค่ระบอบตลาดเดียว
+    - deposit_masking     # ฝากเงินเพิ่มเพื่อซ่อน drawdown (พบใน signal บางเจ้า)
+  SizingMethod: [fixed_lot, fixed_fractional, fractional_kelly, vol_target, martingale, anti_martingale]
+  RegimeLabel: [trend_up, trend_down, range_low_vol, range_high_vol, crisis]
+  Decision: [buy, sell, hold, close, reduce, flat_all]
+
+# -----------------------------------------------------------------------------
+# ENTITIES
+# type notation: str | int | float | bool | datetime | list<T> | map<K,V> | ref<Entity>
+# -----------------------------------------------------------------------------
+entities:
+
+  # ---------------------------------------------------------------- Evidence
+  EvidenceRecord:
+    description: ข้อเท็จจริงจากงานวิจัย/regulator/benchmark ที่ใช้ตั้ง prior
+    key: id
+    fields:
+      id: {type: str, example: "EV-ESMA-CFD-2018"}
+      claim: {type: str}
+      metric: {type: str, example: "share_of_accounts_losing"}
+      value: {type: float | map<str,float>, note: "เก็บเป็นช่วงได้ {low, high}"}
+      population: {type: str, example: "retail CFD clients, EU"}
+      sample_size: {type: int, nullable: true}
+      period: {type: str, example: "2013-2015"}
+      quality: {type: enum<EvidenceQuality>}
+      bias_flags: {type: list<enum<BiasFlag>>}
+      source_url: {type: str}
+      used_for: {type: list<ref<PriorBelief>>}
+
+  PriorBelief:
+    description: ความเชื่อตั้งต้น (ก่อนเห็นผล backtest ของเรา) เช่น P(edge จริง)
+    key: id
+    fields:
+      id: {type: str, example: "PR-EDGE-RETAIL-INTRADAY"}
+      target: {type: str, example: "P(edge_real) for strategy family"}
+      distribution: {type: str, enum_hint: [point, beta, normal, lognormal, mixture]}
+      params: {type: map<str,float>, example: {alpha: 1, beta: 19}}   # Beta(1,19) -> mean 5%
+      derived_from: {type: list<ref<EvidenceRecord>>}
+      rationale: {type: str}
+
+  # ---------------------------------------------------------------- Market & cost
+  Instrument:
+    key: symbol
+    fields:
+      symbol: {type: str, example: "XAUUSD"}
+      asset_class: {type: enum<AssetClass>}
+      contract_size: {type: float}
+      tick_size: {type: float}
+      tick_value: {type: float}
+      trading_sessions: {type: list<str>}
+      typical_daily_range: {type: float, unit: price}
+      broker_id: {type: str}
+
+  CostModel:
+    description: ต้นทุนต่อไม้ — ตัวที่ฆ่า edge ของ EA ระยะสั้นมากที่สุด
+    key: id
+    fields:
+      id: {type: str}
+      instrument: {type: ref<Instrument>}
+      spread_mean: {type: float, unit: price}
+      spread_p95: {type: float, unit: price, note: "ช่วงข่าว/เปิดตลาด spread กว้าง"}
+      commission_per_lot_roundturn: {type: float, unit: account_ccy}
+      slippage_mean: {type: float, unit: price}
+      swap_long_per_day: {type: float}
+      swap_short_per_day: {type: float}
+      latency_ms: {type: float}
+      # derived
+      cost_in_R: {type: float, formula: F02, note: "(spread+slip+comm)/stop_distance"}
+
+  # ---------------------------------------------------------------- Strategy & research
+  StrategySpec:
+    key: id
+    fields:
+      id: {type: str}
+      name: {type: str}
+      family: {type: enum<StrategyFamily>}
+      edge_source: {type: enum<EdgeSource>}
+      edge_hypothesis: {type: str, note: "เขียนก่อน backtest — ป้องกันการเล่าเรื่องย้อนหลัง"}
+      instruments: {type: list<ref<Instrument>>}
+      timeframe: {type: enum<Timeframe>}
+      entry_rules: {type: list<str>}
+      exit_rules: {type: list<str>}
+      parameter_space: {type: ref<ParameterSpace>}
+      sizing: {type: ref<RiskPlan>}
+      uses_averaging_down: {type: bool, note: "true -> ต้องคำนวณ F18/F19 (martingale/grid ruin)"}
+      catalog_ref: {type: str, note: "id ใน data/strategy_catalog.yaml"}
+
+  ParameterSpace:
+    key: id
+    fields:
+      id: {type: str}
+      params: {type: "map<str, {min: float, max: float, step: float}>"}
+      n_free_params: {type: int, note: "ยิ่งมากยิ่งเสี่ยง overfit"}
+      n_combinations: {type: int}
+
+  TrialRegistry:
+    description: >
+      สมุดบันทึกทุกการทดลอง (รวมตัวที่ทิ้งไป) — จำเป็นสำหรับ DSR/PBO/MinBTL
+      ถ้าไม่บันทึก จะประเมิน N ต่ำเกินจริงเสมอ
+    key: id
+    fields:
+      id: {type: str}
+      strategy: {type: ref<StrategySpec>}
+      trials: {type: list<ref<BacktestRun>>}
+      n_trials_total: {type: int}
+      n_trials_effective: {type: float, formula: F11, note: "N_eff จาก eigenvalue ของ correlation matrix ของผลตอบแทนแต่ละ trial"}
+      var_sr_across_trials: {type: float, note: "ใช้ใน F08 (expected max SR)"}
+
+  DataSnapshot:
+    description: ชุดข้อมูลแบบ point-in-time เพื่อตัด look-ahead
+    key: id
+    fields:
+      id: {type: str}
+      source: {type: str}
+      start: {type: datetime}
+      end: {type: datetime}
+      bar_type: {type: enum<Timeframe>}
+      includes_delisted: {type: bool}
+      tick_quality_pct: {type: float, note: "MT5 tester: 'every tick based on real ticks' ดีที่สุด"}
+      content_hash: {type: str}
+
+  BacktestRun:
+    key: id
+    fields:
+      id: {type: str}
+      strategy: {type: ref<StrategySpec>}
+      param_values: {type: map<str,float>}
+      data: {type: ref<DataSnapshot>}
+      cost_model: {type: ref<CostModel>}
+      split: {type: str, enum_hint: [in_sample, out_of_sample, walk_forward_fold, cpcv_path, paper_live, real_live]}
+      trades: {type: list<ref<TradeRecord>>}
+      returns_daily: {type: list<float>}
+      stats: {type: ref<ReturnStats>}
+
+  TradeRecord:
+    fields:
+      trade_id: {type: str}
+      open_time: {type: datetime}
+      close_time: {type: datetime}
+      side: {type: enum<Decision>}
+      entry: {type: float}
+      exit: {type: float}
+      stop_distance: {type: float}
+      size_lots: {type: float}
+      pnl_gross: {type: float}
+      costs: {type: float}
+      pnl_net: {type: float}
+      r_multiple: {type: float, note: "pnl_net / initial_risk"}
+      mae: {type: float, note: "max adverse excursion"}
+      mfe: {type: float, note: "max favorable excursion"}
+      regime_at_entry: {type: enum<RegimeLabel>, nullable: true}
+
+  ReturnStats:
+    description: สถิติสรุปของ return series — input ของเกือบทุกสูตร
+    fields:
+      n_obs: {type: int}
+      periods_per_year: {type: int, example: 252}
+      years: {type: float}
+      mean_annual: {type: float}
+      vol_annual: {type: float}
+      sharpe_annual: {type: float, formula: F05}
+      skew: {type: float, note: "γ3 — strategy แบบ grid/martingale/carry มักติดลบ"}
+      kurtosis: {type: float, note: "γ4 (ไม่ใช่ excess); normal = 3"}
+      max_drawdown: {type: float}
+      win_rate: {type: float}
+      avg_win_R: {type: float}
+      avg_loss_R: {type: float}
+      expectancy_R: {type: float, formula: F01}
+      profit_factor: {type: float}
+      n_trades: {type: int}
+      autocorr_lag1: {type: float, note: "ถ้าสูง SR ต่อปีที่ annualize ด้วย √T จะเพี้ยน"}
+
+  # ---------------------------------------------------------------- Validation
+  ValidationReport:
+    description: ด่านกรองว่า edge "น่าจะจริง" หรือแค่โชค/overfit
+    key: id
+    fields:
+      id: {type: str}
+      strategy: {type: ref<StrategySpec>}
+      registry: {type: ref<TrialRegistry>}
+      t_stat: {type: float, formula: F06}
+      psr: {type: float, formula: F07, note: "P(SR_true > SR*)"}
+      expected_max_sr_null: {type: float, formula: F08}
+      dsr: {type: float, formula: F09, pass_if: ">= 0.95"}
+      min_trl_years: {type: float, formula: F10}
+      min_btl_years: {type: float, formula: F12}
+      pbo: {type: float, formula: F13, pass_if: "<= 0.20"}
+      spa_pvalue: {type: float, formula: F14, note: "Hansen SPA / White Reality Check"}
+      fdr_qvalue: {type: float, formula: F15}
+      walk_forward_efficiency: {type: float, formula: F16, pass_if: ">= 0.5"}
+      cost_stress_sr: {type: map<str,float>, note: "SR เมื่อคูณต้นทุน x1.5, x2"}
+      param_stability: {type: float, note: "สัดส่วน neighbour ใน parameter space ที่ยังมี SR>0"}
+      mc_drawdown_p95: {type: float, formula: F27}
+      haircut_sr: {type: float, formula: F17, note: "SR ที่คาดว่าจะเห็นจริงใน live"}
+      verdict: {type: str, enum_hint: [reject, incubate, deploy_small, deploy]}
+
+  EdgePosterior:
+    description: ความน่าจะเป็นที่ edge จริงหลังเห็นหลักฐาน (Bayes)
+    fields:
+      strategy: {type: ref<StrategySpec>}
+      prior: {type: ref<PriorBelief>}
+      likelihood_inputs: {type: list<str>, example: [dsr, pbo, spa_pvalue, live_incubation]}
+      p_edge_real: {type: float, formula: F20}
+      sr_live_if_real: {type: map<str,float>, note: "{mean, sd} หลัง shrinkage F21 + haircut F17"}
+      sr_live_if_not_real: {type: float, note: "≈ -(ต้นทุน/vol) เช่น -0.3 ถึง -0.5"}
+
+  # ---------------------------------------------------------------- Regime
+  RegimeModel:
+    description: Hidden Markov / Markov-switching เพื่อดูว่า edge ขึ้นกับระบอบตลาดหรือไม่
+    fields:
+      states: {type: list<enum<RegimeLabel>>}
+      transition_matrix: {type: list<list<float>>, note: "แถวรวม = 1"}
+      expected_duration: {type: map<str,float>, formula: F25}
+      stationary_dist: {type: map<str,float>, formula: F25}
+      sr_by_regime: {type: map<str,float>}
+      current_state_prob: {type: map<str,float>}
+
+  # ---------------------------------------------------------------- Risk & sizing
+  RiskPlan:
+    key: id
+    fields:
+      id: {type: str}
+      method: {type: enum<SizingMethod>}
+      risk_per_trade: {type: float, example: 0.005, note: "สัดส่วนของ equity ต่อไม้"}
+      kelly_fraction_c: {type: float, example: 0.25, note: "c ใน c·f*; มืออาชีพใช้ 0.25–0.5"}
+      vol_target_annual: {type: float, example: 0.10}
+      max_portfolio_dd: {type: float, example: 0.20, note: "นิยาม 'ruin' ในทางปฏิบัติ"}
+      daily_loss_limit: {type: float, example: 0.03}
+      max_open_risk: {type: float}
+      max_correlated_exposure: {type: float}
+      # derived
+      ruin_units_D: {type: float, note: "max_portfolio_dd / risk_per_trade (หน่วย R)"}
+      p_ruin: {type: float, formula: F23}
+      p_fall_to_x: {type: map<str,float>, formula: F22}
+
+  ConsistencyCriteria:
+    description: นิยาม "ทำกำไรต่อเนื่อง" ให้วัดได้ (ปรับได้ตามเป้าหมาย)
+    key: id
+    fields:
+      id: {type: str, example: "CC-STRICT-3Y"}
+      horizon_years: {type: float}
+      require_positive_total: {type: bool}
+      min_positive_years_frac: {type: float}
+      min_positive_months_frac: {type: float}
+      max_drawdown: {type: float}
+      min_cagr: {type: float, nullable: true}
+
+  # ---------------------------------------------------------------- Output
+  ProbabilityReport:
+    description: ผลลัพธ์รวม — สิ่งที่เราอยากรู้จริงๆ
+    fields:
+      strategy_or_portfolio: {type: str}
+      criteria: {type: ref<ConsistencyCriteria>}
+      p_edge_real: {type: float}
+      p_positive_horizon: {type: float, formula: F04}
+      p_positive_month: {type: float, formula: F03}
+      p_consistent: {type: float, formula: F29}
+      p_ruin: {type: float}
+      p_dd_exceeds: {type: map<str,float>, note: "{0.2: .., 0.3: ..}"}
+      expected_cagr: {type: map<str,float>, note: "{p5, p50, p95}"}
+      p_pass_prop_challenge: {type: float, formula: F24, nullable: true}
+      key_sensitivities: {type: list<str>, example: [cost_in_R, n_trials, kelly_fraction_c]}
+      confidence_note: {type: str}
+
+  # ---------------------------------------------------------------- AI / LLM agent
+  AgentDecisionLog:
+    description: >
+      บันทึกการตัดสินใจของ LLM agent แบบ point-in-time — จำเป็นเพื่อพิสูจน์ว่า
+      ผลลัพธ์ไม่ได้มาจาก memorization/look-ahead และเพื่อวัด calibration
+    fields:
+      decision_id: {type: str}
+      decision_time: {type: datetime}
+      model_id: {type: str}
+      model_knowledge_cutoff: {type: datetime}
+      contamination_safe: {type: bool, rule: "decision_time > model_knowledge_cutoff"}
+      input_snapshot_hash: {type: str, note: "อ้าง DataSnapshot + ข่าว ณ เวลานั้น"}
+      prompt_version: {type: str}
+      temperature: {type: float}
+      proposed_action: {type: enum<Decision>}
+      proposed_size_R: {type: float}
+      stated_prob_up: {type: float, note: "ใช้คำนวณ Brier score (F28)"}
+      rationale: {type: str}
+      self_consistency_k: {type: int, note: "ถามซ้ำ k ครั้ง"}
+      self_consistency_agreement: {type: float, note: "สัดส่วนคำตอบที่ตรงกัน"}
+      risk_engine_verdict: {type: str, enum_hint: [approved, resized, rejected]}
+      executed: {type: bool}
+      api_cost: {type: float, unit: USD}
+      outcome_R: {type: float, nullable: true}
+
+  LiveMonitor:
+    description: เฝ้าดู edge เสื่อม + kill switch แบบมีสถิติรองรับ
+    fields:
+      strategy: {type: ref<StrategySpec>}
+      live_stats: {type: ref<ReturnStats>}
+      cusum_stat: {type: float, formula: F26}
+      sprt_log_lr: {type: float, formula: F26}
+      dd_vs_mc_percentile: {type: float, note: "live DD อยู่ percentile ไหนของ MC (F27)"}
+      posterior_sr: {type: float, formula: F21}
+      action: {type: str, enum_hint: [continue, reduce_size, pause, retire]}
+
+  StrategyPortfolio:
+    fields:
+      members: {type: list<ref<StrategySpec>>}
+      weights: {type: list<float>}
+      corr_matrix: {type: list<list<float>>}
+      n_effective: {type: float, formula: F11}
+      sr_portfolio: {type: float, formula: F19}
+
+# -----------------------------------------------------------------------------
+# FORMULA REGISTRY (รายละเอียด/ที่มา: docs/02_math_framework.md)
+# -----------------------------------------------------------------------------
+formula_registry:
+  F01: {name: expectancy_R, expr: "E = p·W − (1−p)·L", inputs: [win_rate p, avg_win_R W, avg_loss_R L]}
+  F02: {name: cost_adjusted_expectancy, expr: "E_net = E − c_R ; c_R = (spread+slip+comm)/stop ; p_BE = (L+c_R)/(W+L)"}
+  F03: {name: p_positive_period, expr: "P = Φ(SR·√(Δt))  (Δt หน่วยปี; เดือน: Φ(SR/√12))"}
+  F04: {name: p_positive_horizon, expr: "P = Φ(SR·√T)"}
+  F05: {name: sharpe, expr: "SR = mean/σ · √(periods_per_year)"}
+  F06: {name: t_stat, expr: "t ≈ SR_annual · √years ; ควร > 3 (Harvey-Liu-Zhu)"}
+  F07: {name: probabilistic_sharpe, expr: "PSR(SR*) = Φ( (ŜR−SR*)·√(n−1) / √(1 − γ3·ŜR + (γ4−1)/4·ŜR²) )  (SR ต่อ period)"}
+  F08: {name: expected_max_sr_null, expr: "SR0 = √V[ŜR]·((1−γ)Φ⁻¹(1−1/N) + γΦ⁻¹(1−1/(N·e))) ; γ=0.5772"}
+  F09: {name: deflated_sharpe, expr: "DSR = PSR(SR* = SR0)"}
+  F10: {name: min_track_record_length, expr: "MinTRL = 1 + (1 − γ3·ŜR + (γ4−1)/4·ŜR²)·(z_α/(ŜR−SR*))²  (หน่วย period)"}
+  F11: {name: effective_n, expr: "N_eff = (Σλ_i)² / Σλ_i²  (λ = eigenvalues ของ correlation matrix)"}
+  F12: {name: min_backtest_length, expr: "MinBTL ≈ (E[max_N] / SR_target)² ปี ; E[max_N] ≈ ((1−γ)Φ⁻¹(1−1/N)+γΦ⁻¹(1−1/(Ne)))"}
+  F13: {name: pbo_cscv, expr: "PBO = #{splits ที่ตัวชนะ IS ตกครึ่งล่าง OOS} / #splits ; λ = logit(rank_OOS)"}
+  F14: {name: reality_check_spa, expr: "bootstrap max_k √n·(d̄_k) เทียบ benchmark (White 2000; Hansen 2005)"}
+  F15: {name: fdr_bh, expr: "เรียง p_(i); reject ถ้า p_(i) ≤ i·q/m (Benjamini–Hochberg)"}
+  F16: {name: walk_forward_efficiency, expr: "WFE = annualized_return_OOS / annualized_return_IS"}
+  F17: {name: haircut_sr, expr: "SR_live ≈ SR_bt·(1−h) ; h มาจาก McLean–Pontiff (0.26–0.58) หรือ Harvey–Liu haircut"}
+  F18: {name: martingale_cycle, expr: "P_fail_cycle = q^k ; EV_cycle = (1−q^k)·u − q^k·(2^k−1)·u"}
+  F19: {name: diversified_sr, expr: "SR_p = SR·√(N/(1+(N−1)ρ))"}
+  F20: {name: bayes_edge, expr: "P(real|pass) = π·power / (π·power + α·(1−π))"}
+  F21: {name: sr_shrinkage, expr: "SR_post = (SR_prior/τ² + ŜR·T)/(1/τ² + T)  (Var[ŜR] ≈ 1/T)"}
+  F22: {name: kelly_and_drawdown, expr: "f* = p − q/b ; continuous f* = μ/σ² ; g(c) = (c − c²/2)·SR² ; P(ลดลงเหลือ x) = x^(2/c − 1)"}
+  F23: {name: risk_of_ruin, expr: "RoR ≈ exp(−2·E·D / σ²_R) ; D = DD_limit / risk_per_trade"}
+  F24: {name: two_barrier_hit, expr: "P(+a ก่อน −b) = (e^{kb} − 1)/(e^{kb} − e^{−ka}) ; k = 2μ/σ²"}
+  F25: {name: markov_regime, expr: "E[duration_i] = 1/(1−p_ii) ; π_stationary = πP"}
+  F26: {name: cusum_sprt, expr: "S_t = max(0, S_{t−1} + (k − x_t)) (ตรวจ mean ลดลง) ; SPRT: Λ_t = Σ log f1(x)/f0(x)"}
+  F27: {name: monte_carlo_bootstrap, expr: "stationary block bootstrap ของ returns/trades → การกระจายของ MDD, CAGR"}
+  F28: {name: brier_calibration, expr: "BS = mean((p_t − y_t)²)"}
+  F29: {name: p_consistent_mixture, expr: "P(consistent) = Σ_k P(state_k)·P(consistent | SR_k, σ, criteria)  (MC)"}
+  F30: {name: fundamental_law, expr: "IR ≈ IC·√BR (BR = จำนวนเดิมพันที่เป็นอิสระต่อปี)"}
+
+# -----------------------------------------------------------------------------
+# PIPELINE (DAG) — ลำดับการคำนวณ
+# -----------------------------------------------------------------------------
+pipeline:
+  - step: 1_priors
+    in: [EvidenceRecord]
+    out: [PriorBelief]
+    note: "base rate ของ retail/EA/LLM agent ที่ทำกำไรได้จริง"
+  - step: 2_hypothesis
+    in: [StrategySpec.edge_source, StrategySpec.edge_hypothesis]
+    out: [PriorBelief (ปรับตาม family)]
+    note: "edge_source = none_identified → ลด prior"
+  - step: 3_backtest_all_trials
+    in: [StrategySpec, ParameterSpace, DataSnapshot, CostModel]
+    out: [BacktestRun*, TrialRegistry]
+  - step: 4_validate
+    in: [TrialRegistry, ReturnStats]
+    out: [ValidationReport]
+    formulas: [F06, F07, F08, F09, F10, F12, F13, F14, F15, F16, F27]
+  - step: 5_posterior
+    in: [PriorBelief, ValidationReport]
+    out: [EdgePosterior]
+    formulas: [F17, F20, F21]
+  - step: 6_size_and_risk
+    in: [EdgePosterior, RiskPlan]
+    out: [RiskPlan.p_ruin, RiskPlan.p_fall_to_x]
+    formulas: [F22, F23, F18]
+  - step: 7_portfolio
+    in: [StrategySpec*, corr_matrix]
+    out: [StrategyPortfolio]
+    formulas: [F11, F19, F30]
+  - step: 8_probability
+    in: [EdgePosterior, RiskPlan, ConsistencyCriteria, StrategyPortfolio]
+    out: [ProbabilityReport]
+    formulas: [F03, F04, F24, F29]
+  - step: 9_incubate_and_monitor
+    in: [real/paper live returns, AgentDecisionLog]
+    out: [LiveMonitor]
+    formulas: [F21, F26, F27, F28]
+    loop_back_to: 5_posterior

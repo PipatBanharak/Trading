@@ -1,0 +1,140 @@
+# =============================================================================
+# Skill Catalog — "สกิล" ที่มีผลต่อความน่าจะเป็นในการทำกำไรต่อเนื่อง
+# -----------------------------------------------------------------------------
+# ใช้ได้ทั้ง (ก) สกิลของคนเทรด/นักพัฒนา EA และ (ข) โมดูลของ AI Agent
+# impact = สกิลนี้ไปเปลี่ยนตัวแปรไหนในสมการ P(consistent)
+# priority: 1 = สำคัญที่สุด (ทำก่อน)
+# =============================================================================
+
+skills:
+
+  - id: SK01
+    name: Position sizing & risk of ruin
+    priority: 1
+    what: กำหนดขนาดไม้จาก equity, vol, Kelly fraction; daily loss limit; max DD
+    why: >
+      edge จริงแต่ไม้ใหญ่ไป = ล้างพอร์ตได้; จาก F23 ที่ expectancy 0.15R
+      risk 3%/ไม้ (D=10) RoR ≈ 15%, risk 1%/ไม้ (D=30) RoR ≈ 0.3%
+    impact: [p_ruin, p_dd_exceeds, p_consistent]
+    formulas: [F22, F23]
+    agent_module: risk_engine (deterministic, มีสิทธิ์ veto ทุก order)
+    evidence: [EV-PROP-FIRMS]
+
+  - id: SK02
+    name: Cost modeling (spread / commission / slippage / swap)
+    priority: 1
+    what: วัดต้นทุนจริงของโบรกเกอร์เป็น R ต่อไม้ และ stress test x1.5, x2
+    why: กลยุทธ์ที่ E=0.1R และ cost 0.1R → E_net = 0 → ruin แน่นอนในระยะยาว
+    impact: [expectancy_R, sr_live]
+    formulas: [F02]
+    agent_module: cost_model
+    evidence: [EV-BAJGROWICZ-SCAILLET, EV-TAIWAN-DAYTRADE]
+
+  - id: SK03
+    name: Research hygiene — บันทึกทุก trial
+    priority: 1
+    what: TrialRegistry, hypothesis ก่อน backtest, แยก IS/OOS ตั้งแต่แรก, ห้ามแตะ OOS ซ้ำ
+    why: ลอง 45 แบบบน 5 ปี → SR=1 จากโชคล้วน (F08/F12)
+    impact: [n_trials, dsr, pbo, p_edge_real]
+    formulas: [F08, F09, F12, F13]
+    agent_module: experiment_tracker
+    evidence: [EV-BAILEY-MINBTL, EV-HARVEY-LIU-ZHU]
+
+  - id: SK04
+    name: Statistical validation
+    priority: 1
+    what: PSR, DSR, MinTRL, PBO (CSCV), Hansen SPA, FDR, walk-forward, CPCV, MC bootstrap
+    why: แยก edge จริงออกจาก noise — ยกระดับ PPV จาก ~14% เป็น ~60%+ (F20)
+    impact: [p_edge_real]
+    formulas: [F06, F07, F09, F10, F13, F14, F15, F16, F27]
+    agent_module: validator
+
+  - id: SK05
+    name: Edge thesis (รู้ว่าได้เงินจากใคร/เพราะอะไร)
+    priority: 2
+    what: ระบุ EdgeSource (risk premium / behavioral / structural / liquidity)
+    why: กลยุทธ์ที่มีเหตุผลทางเศรษฐศาสตร์อยู่รอดหลังตีพิมพ์ดีกว่า (McLean–Pontiff)
+    impact: [prior π, decay λ]
+    formulas: [F17, F20]
+
+  - id: SK06
+    name: Diversification across uncorrelated edges
+    priority: 2
+    what: หลายกลยุทธ์ × หลายตลาด, วัด N_eff
+    why: 10 กลยุทธ์ SR 0.5 ρ=0.2 → SR พอร์ต ≈ 0.94 (F19)
+    impact: [sr_portfolio, p_consistent]
+    formulas: [F11, F19, F30]
+    agent_module: portfolio_allocator
+
+  - id: SK07
+    name: Regime awareness
+    priority: 2
+    what: HMM / vol regime / trend strength เพื่อลดขนาดหรือปิดกลยุทธ์ที่ไม่เหมาะกับระบอบ
+    why: trend ทำเงินดีในบางปีและแทบไม่ได้อะไรทั้งทศวรรษในบางช่วง (EV-CTA-LOST-DECADE)
+    impact: [sr_by_regime, max_drawdown]
+    formulas: [F25]
+    agent_module: regime_detector (LLM ช่วยอ่าน macro/news เป็น feature ได้)
+
+  - id: SK08
+    name: Live monitoring & kill switch
+    priority: 2
+    what: CUSUM/SPRT ตรวจ edge เสื่อม; เทียบ live DD กับการกระจาย MC
+    why: edge เสื่อมตามเวลา (Neely–Weller–Ulrich); หยุดเร็ว = ลดความเสียหาย
+    impact: [decay λ, p_ruin]
+    formulas: [F21, F26, F27]
+    agent_module: monitor
+
+  - id: SK09
+    name: Execution quality
+    priority: 3
+    what: order type, หลีกเลี่ยงช่วง spread กว้าง (rollover, ข่าว), VPS latency
+    impact: [cost_in_R]
+    agent_module: executor
+
+  - id: SK10
+    name: Data integrity (point-in-time)
+    priority: 2
+    what: tick ข้อมูลจริง, timezone/DST ถูกต้อง, ไม่มี look-ahead, ข่าวมี timestamp
+    impact: [p_edge_real]
+    agent_module: data_layer
+
+  - id: SK11
+    name: Discipline / determinism
+    priority: 2
+    what: คน — ไม่แทรกแซงระบบ; Agent — temperature ต่ำ, self-consistency, output schema
+    why: ผล LLM แปรปรวนมากระหว่างรอบ/โมเดล (Alpha Arena, LiveTradeBench)
+    impact: [variance of results]
+    formulas: [F28]
+    agent_module: decision_guard
+
+  - id: SK12
+    name: LLM contamination control
+    priority: 1 (เฉพาะ AI agent)
+    what: ประเมินเฉพาะช่วงหลัง knowledge cutoff, ซ่อนชื่อ ticker/วันที่, log ทุก decision
+    why: memorization ทำให้ backtest LLM ดีเกินจริง (EV-LOOKAHEAD-MEMORIZATION)
+    impact: [p_edge_real]
+    agent_module: AgentDecisionLog.contamination_safe
+
+  - id: SK13
+    name: Scam / counterparty due diligence
+    priority: 1 (สำหรับผู้ซื้อ EA / signal)
+    what: ตรวจ Absolute Gain vs Gain, ประวัติฝาก/ถอน, broker ที่มีใบอนุญาต
+    why: deposit masking, EA ล้มแล้วออกชื่อใหม่ (survivorship), forex ไม่อยู่ใต้ ก.ล.ต.
+    impact: [operational_risk]
+    evidence: [EV-SIGNAL-DD-MASKING, EV-MQL5-NO-GLOBAL-NUMBER, EV-TH-SEC-FOREX]
+
+# -----------------------------------------------------------------------------
+# AGENT ARCHITECTURE (แนะนำ) — map สกิล → โมดูล
+# -----------------------------------------------------------------------------
+recommended_agent_architecture:
+  principle: "LLM เสนอ — กฎ systematic ตัดสิน — risk engine veto — monitor หยุดระบบ"
+  modules:
+    - {name: data_layer,          skills: [SK10],       llm: false}
+    - {name: research_assistant,  skills: [SK05, SK03], llm: true,  note: "สร้าง/วิจารณ์ hypothesis; ทุก idea ลง TrialRegistry"}
+    - {name: validator,           skills: [SK04],       llm: false}
+    - {name: regime_detector,     skills: [SK07],       llm: optional, note: "LLM อ่านข่าวเป็น feature / news blackout"}
+    - {name: signal_engine,       skills: [SK05],       llm: false, note: "กฎ trend/carry/MR ที่ผ่าน validation"}
+    - {name: portfolio_allocator, skills: [SK06],       llm: false}
+    - {name: risk_engine,         skills: [SK01, SK02], llm: false, note: "veto ได้ทุกคำสั่ง"}
+    - {name: executor,            skills: [SK09],       llm: false}
+    - {name: monitor,             skills: [SK08, SK11], llm: optional, note: "LLM สรุปรายงาน/อธิบายความผิดปกติ"}
