@@ -13,6 +13,7 @@ docs/
   04_ea_market_survey.md         สำรวจ EA/bot ยอดนิยม (ทอง, BTC): เทคนิค ข้อดีข้อเสีย สิ่งที่ยืม/ห้าม
   05_btc_xau_rule_calculations.md  คำนวณกฎสำหรับ BTC + XAU: ต้นทุนต่อ TF, sizing, DD ladder, execution
   06_backtest_s1_results.md      ผล backtest S1 + บันทึกการตรวจความปลอดภัยของข้อมูล
+  07_binance_futures_setup.md    ใช้ Binance USDⓈ-M futures: ข้อกฎหมายไทย, เงินต้นที่ต้องใช้, ตั้งค่าบัญชี/คำสั่ง, backtest แบบ Binance
 backtest/
   fetch.py                       ดาวน์โหลดแบบ allowlist + ตรวจไฟล์ (magic bytes, strict CSV, ราคาอ้างอิง, SHA-256)
   engine.py                      จำลอง sleeve S1 (vol target, cap, buffer, ต้นทุน, funding, stop)
@@ -58,7 +59,8 @@ python3 -m unittest discover -s tests
 | ขีดจำกัดขาดทุน | รายวัน 1.5% (หยุดเปิดใหม่) / 3% (ปิดทั้งหมด); DD 10% ทบทวน / 15% ลดครึ่ง / 20% หยุด |
 | Execution | BTC rebalance 00:20 UTC (หลัง funding) เลี่ยงนาที :00/:15/:30/:45; ทอง 15:30–16:30 UTC; blackout ช่วง rollover และข่าว; XAUUSDT ตรวจ cap ก่อนปิดศุกร์ 21:00 UTC |
 | ห้ามใช้ | grid, martingale, DCA safety orders, scalping ที่ TF ต่ำกว่าขั้นต่ำ, ระยะเป็น $ ตายตัว |
-| บัญชีขั้นต่ำ | ~$3,000 บน Binance; ทอง ECN CFD เหมาะเมื่อ equity เกิน ~$90k (ขั้นต่ำ 1 oz) |
+| Venue | **Binance USDⓈ-M Futures เท่านั้น** (BTCUSDT + XAUUSDT), isolated 2x, one-way, post-only ก่อน, stop ผ่าน Algo order |
+| บัญชีขั้นต่ำ | Incubation (vol 4%) ~$7,000 · vol 8% ~$3,400 · leverage จริง 0.01x ต้องใช้ ~$20,000–$40,000 (BTC min notional 100 USDT) |
 
 **ความน่าจะเป็นที่คาด (3 ปี, vol 8%):** P(กำไรรวมเป็นบวก) ≈ **60%** หรือ ~66% ถ้า sleeve สมมติฐานผ่าน validation; CAGR มัธยฐานถ้า edge จริงอยู่ที่ ~3.5–5.5%/ปี บวกดอกเบี้ยของเงินสดที่ไม่ได้ใช้
 
@@ -70,6 +72,9 @@ python3 -m unittest discover -s tests
 | สร้าง EA เองโดยไม่มี validation | 32.9% | 32.5% | 1.3% |
 | LLM ตัดสินใจเทรดเอง | 23.1% | 22.9% | 1.0% |
 | Pipeline เข้มงวด + กระจาย + ¼–½ Kelly | 65.3% | 64.9% | 10.4% |
+
+## ⚠️ ข้อกฎหมาย (ผู้อยู่ในไทย)
+Binance.com ไม่มีใบอนุญาต ก.ล.ต. (ช่วงผ่อนผันสิ้นสุด 28 มิ.ย. 2026) และ Binance TH เป็น spot เท่านั้น → ปรึกษาทนายก่อนใช้เงินจริง ทางเลือกที่ถูกกฎหมายคือ TFEX Gold-D / GF10 และ BTC futures ที่คาดว่าจะเปิด (ดู `docs/07` §0)
 
 ## ขั้นถัดไป
 1. เปิด network host `data.binance.vision`, `data-api.binance.vision`, `prices.lbma.org.uk` เพื่อทดสอบบนข้อมูล perps/XAUUSDT รายชั่วโมงและ funding จริง (ตอนนี้ถูก policy บล็อก)

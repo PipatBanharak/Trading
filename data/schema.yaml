@@ -425,6 +425,19 @@ entities:
       slippage_guard_frac: {type: float}
       stop_trigger: {type: str, enum_hint: [mark_price, last_price]}
 
+  AccountConfig:
+    description: การตั้งค่าบัญชี exchange (Binance USDⓈ-M) — ค่าอยู่ใน data/rulebook.yaml#account_config
+    fields:
+      venue: {type: ref<VenueSpec>}
+      position_mode: {type: str, enum_hint: [one_way, hedge]}
+      margin_mode: {type: str, enum_hint: [isolated, cross]}
+      leverage_setting: {type: "map<str,int>", note: "เพดาน margin/liquidation ไม่ใช่ขนาดไม้"}
+      effective_leverage: {type: float, note: "notional / equity — ควบคุมด้วย sizing"}
+      min_equity_usd: {type: float, formula: F38}
+      api_permissions: {type: list<str>}
+      withdrawal_enabled: {type: bool, rule: "ต้องเป็น false"}
+      compliance_checked: {type: bool, rule: "ต้องเป็น true ก่อนใช้เงินจริง"}
+
   SleeveAllocation:
     description: การแบ่ง risk ให้กลยุทธ์ย่อย (sleeve) ภายในพอร์ต
     fields:

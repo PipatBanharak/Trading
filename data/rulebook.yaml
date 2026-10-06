@@ -18,15 +18,32 @@ meta:
 # 1. VENUE SELECTION
 # -----------------------------------------------------------------------------
 venue_selection:
-  BTC:
-    default: V-BTC-PERP-BINANCE
-    switch_long_to_spot_if: "funding_7d_avg > 0.0003 per 8h AND signal > 0"   # §D2
-    banned: [V-BTC-CFD-MT5]                                                  # swap 10–30%/ปี
-  XAU:
-    if_equity_usd_below: 90000
-    then: V-XAU-PERP-BINANCE        # §E3 ซื้อได้ทีละ 0.001 oz
-    else: V-XAU-CFD-ECN-MT5         # ต้นทุนต่อไม้ถูกกว่า ~10–15 เท่า
-  min_equity_usd: 3000              # §E3: ≥5 หน่วยขั้นต่ำของ BTCUSDT ที่สัญญาณเต็ม
+  decided: "Binance USDⓈ-M Futures only (2026-10)"           # docs/07
+  BTC: V-BTC-PERP-BINANCE
+  XAU: V-XAU-PERP-BINANCE
+  compliance_gate: "ห้ามเริ่มเงินจริงจนกว่ายืนยันสถานะทางกฎหมายของผู้ใช้/บริษัท (docs/07 §0)"
+  min_equity_usd:                                            # docs/07 §2.3 (BTC min notional 100 USDT)
+    incubation_vol_4pct: 7000
+    start_vol_8pct: 3400
+    effective_leverage_0_01x: 40000                          # ใช้ได้แค่ทดสอบระบบ
+  funding_rules:
+    BTC:
+      halve_long_if: "funding_7d_avg > 0.0003 per 8h (~33%/ปี)"
+      flat_long_if: "funding_7d_avg > 0.0005 per 8h (~55%/ปี) — เกินผลตอบแทนคาดหวังต่อหน่วย notional หลัง haircut"
+      status: "ต้องยืนยันด้วย funding history จริง (data.binance.vision)"
+    XAU:
+      pause_long_if: "funding 30d ที่ long จ่าย > 8%/ปี และ short ไม่ได้รับใกล้เคียงกัน"
+      reason: "backtest: ถ้า long จ่าย 10.95%/ปีฝ่ายเดียว Sharpe ทอง → 0.01 (docs/07 §3)"
+
+account_config:
+  sub_account: dedicated_bot
+  margin_asset: USDT
+  multi_assets_mode: false
+  position_mode: one_way
+  margin_mode: isolated
+  leverage_setting: {BTCUSDT: 2, XAUUSDT: 2}                 # เพดาน ไม่ใช่ขนาดไม้
+  api_key: {permissions: [futures_trade], withdrawal: disabled, ip_whitelist: required, storage: "outside repo", rotate_days: 90}
+  testnet_first: {url: "https://testnet.binancefuture.com", duration_months: 1}
 
 # -----------------------------------------------------------------------------
 # 2. TIMEFRAME CONSTRAINT (คำนวณใหม่ทุกวันจาก σ̂)
@@ -92,11 +109,12 @@ execution_policy:
       halt: "Fri 21:00 → Sun 21:00"
       pre_weekend_check: "Fri ≤ 20:30: enforce U_XAU_max, no new risk after 20:30"
   order_logic:
-    step1: "post-only limit at best bid/ask"
-    step2: "ถ้าไม่ fill ใน 10 นาที → taker (marketable limit) กำหนด slippage guard 0.10%"
+    step1: "LIMIT timeInForce=GTX (post-only) at best bid/ask"
+    step2: "ถ้าไม่ fill ใน 10 นาที → LIMIT timeInForce=IOC ราคาห่าง mid ≤ 0.10% (ไม่ใช้ MARKET)"
     step3: "ถ้าเกิน guard → เลื่อนไปรอบถัดไป, log เหตุผล"
   stops:
-    type: reduce_only_stop_market
+    type: "Algo order STOP_MARKET via POST /fapi/v1/algoOrder"
+    flags: {reduceOnly: true, workingType: MARK_PRICE, priceProtect: true}
     trigger_price: mark_price
   cost_audit:
     frequency: monthly
@@ -238,3 +256,9 @@ backtest_v1:
     - "ห้ามขยาย vol เกิน incubation จนกว่า rolling 2y Sharpe ของ BTC S1 กลับมา > 0.5 หรือผ่าน incubation 6 เดือน"
     - "ทองทำหน้าที่ diversifier (corr −0.06) ไม่ใช่แหล่งกำไรหลัก"
     - "ต้องทดสอบซ้ำบนข้อมูล Binance perps/XAUUSDT รายชั่วโมง + funding จริง เมื่อเปิด host ได้"
+
+binance_backtest_v1:                     # docs/07 §3, results/s1_results.json → binance_futures
+  gold_funding_scenarios:
+    symmetric_5pct: {gold_sharpe_adj: 0.25, portfolio_sharpe: 1.28, p_pos_3y_blended: 0.71}
+    symmetric_10_95pct: {gold_sharpe_adj: 0.23, portfolio_sharpe: 1.23, p_pos_3y_blended: 0.70}
+    long_pays_only_10_95pct: {gold_sharpe_adj: 0.01, portfolio_sharpe: 1.12, p_pos_3y_blended: 0.69}

@@ -46,6 +46,10 @@ venues:
     slippage_small_order_frac: 0.0001    # < 0.05% สำหรับไซซ์เล็ก; ใช้ 1bp
     depth_1bp_usd: 2.3e6
     min_qty_btc: 0.001
+    min_notional_usdt: 100                # BTCUSDT filter (ตรวจ exchangeInfo ทุกวัน)
+    funding_interest_component_per_8h: 0.0001   # ส่วนดอกเบี้ยฐานของสูตร funding (~10.95%/ปี)
+    conditional_orders: "Algo Service: POST /fapi/v1/algoOrder (ตั้งแต่ 2025-12-09; endpoint เดิมตอบ -4120)"
+    testnet: https://testnet.binancefuture.com
     microstructure_note: "volatility/volume พุ่งที่ :00/:15/:30/:45 จาก algo (Kim & Hansen 2026)"
     cost_rt_frac:
       taker_taker: 0.0012
@@ -112,7 +116,17 @@ venues:
 # -----------------------------------------------------------------------------
 # สรุปเลือก venue (คำนวณใน docs/05 §C)
 # -----------------------------------------------------------------------------
-venue_recommendation:
+venue_decision_2026_10:
+  chosen: "Binance USDⓈ-M Futures เท่านั้น (BTCUSDT + XAUUSDT)"
+  compliance_warning: >
+    ผู้มีถิ่นที่อยู่ในไทย: Binance.com ไม่มีใบอนุญาต ก.ล.ต. (ผ่อนผันสิ้นสุด 2026-06-28) และถูกบล็อก IP ไทย;
+    Binance TH เป็น spot เท่านั้น — ปรึกษาทนายก่อนใช้งานจริง (ดู docs/07 §0)
+  legal_alternatives_th:
+    - {id: TFEX-GD, product: "Gold-D (USD) futures", size: "100 g = 3.2148 oz", tick_usd: 0.10}
+    - {id: TFEX-GF10, product: "10 Baht Gold futures", size: "10 บาททองคำ (96.5%)", tick_thb: 10}
+    - {id: TFEX-BTC, product: "Bitcoin futures", status: "คาดเปิด H2 2026 – ต้น 2027"}
+
+venue_recommendation_pre_decision:
   BTC:
     primary: V-BTC-PERP-BINANCE      # ต้นทุนต่อไม้ต่ำ, short ได้, ไซซ์เล็กได้
     long_heavy_alternative: V-BTC-SPOT-BINANCE   # ถ้า funding สูงต่อเนื่อง

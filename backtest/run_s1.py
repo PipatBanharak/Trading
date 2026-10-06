@@ -262,6 +262,34 @@ def main(argv=None):
     _, btc_r, _, _ = from_start(base, BTC_START)
     R["btc_bootstrap_3y"] = stats.bootstrap_summary(stats.stationary_bootstrap(btc_r, 3 * 365, 2000, 20))
 
+    # ---------------- Binance-USDⓈ-M-only configuration (BTCUSDT + XAUUSDT perps)
+    # XAUUSDT funding history is not reachable; Binance's default funding has an interest
+    # component of 0.01%/8h (~10.95%/yr) paid by longs when the premium is ~0.
+    R["binance_futures"] = {"gold_funding_assumptions": {}}
+    gold_fund = {"symmetric_10.95": (0.1095, 0.1095), "long_pays_only_10.95": (0.1095, 0.0),
+                 "symmetric_5": (0.05, 0.05)}
+    bin_gold = {}
+    for name, (fl, fs) in gold_fund.items():
+        g = engine.run_sleeve(au_d, au_p, gold_params(cost_per_side=COST["xauusdt_maker_taker"],
+                                                     funding_long=fl, funding_short=fs))
+        bin_gold[name] = g
+        rep = sleeve_report(g, GOLD_START, 12)
+        rep["sharpe_adj"] = rep["sharpe"] * math.sqrt(2 / 3)
+        R["binance_futures"]["gold_funding_assumptions"][name] = rep
+    for name, g in bin_gold.items():
+        gd2, gr2, _, _ = from_start(g, BTC_START[:7])
+        gm = dict(zip(gd2, gr2))
+        dd_, rr_ = [], []
+        for d_, r_ in zip(bm_d, bm_r):
+            if d_ in gm:
+                dd_.append(d_)
+                rr_.append(r_ + gm[d_])
+        rep = stats.summary(rr_, 12, dd_)
+        mean_ = sum(rr_) / len(rr_)
+        rep["bootstrap_3y"] = {f"edge_cut_{int(h * 100)}pct": stats.bootstrap_summary(
+            stats.stationary_bootstrap([x - h * mean_ for x in rr_], 36, 5000, 6)) for h in (0.0, 0.5, 1.0)}
+        R["binance_futures"]["portfolio_gold_funding_" + name] = rep
+
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:
         json.dump(_clean_json(R), f, indent=1)
